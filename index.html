@@ -889,49 +889,84 @@ async function findRoute() {
   }
   coords.push([goalLng, goalLat]);
 
-  try {
-    let resp;
-
+  // ── ORS 요청 (GET 우선, 경유지 있으면 POST) ──────────────────────────
+  async function fetchOrs() {
     if (coords.length === 2) {
-      // ── 2점 경로: GET 방식 ──────────────────────────────────────────────
-      // GET은 CORS Preflight가 전혀 발생하지 않는 simple request
-      // → 모바일 Chrome 포함 모든 환경에서 동작
       const [s, e] = coords;
-      const getUrl = `${ORS_BASE}/${selectedProfile}/geojson` +
+      const url = `${ORS_BASE}/${selectedProfile}/geojson` +
         `?start=${s[0]},${s[1]}&end=${e[0]},${e[1]}` +
         `&api_key=${encodeURIComponent(apiKey)}&elevation=true`;
-      resp = await fetch(getUrl);
+      return fetch(url);                             // GET — Preflight 없음
+    }
+    const url  = `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`;
+    const body = JSON.stringify({ coordinates: coords, elevation: true, instructions: false });
+    try {
+      return await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+    } catch {
+      return fetch(url, { method:'POST', body });    // Content-Type 제거 재시도
+    }
+  }
 
-    } else {
-      // ── 경유지 포함: POST 방식 (1차: 표준, 2차: Content-Type 제거) ──────
-      const postUrl  = `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`;
-      const postBody = JSON.stringify({ coordinates: coords, elevation: true, instructions: false });
-      try {
-        resp = await fetch(postUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: postBody,
-        });
-      } catch {
-        resp = await fetch(postUrl, { method: 'POST', body: postBody });
+  // ── OSRM fallback (ORS 서버 차단 시 자동 전환) ───────────────────────
+  async function fetchOsrm() {
+    const profile = { 'foot-hiking':'foot', 'foot-walking':'foot', 'cycling-regular':'bike' }[selectedProfile] ?? 'foot';
+    const waypoints = coords.map(c => `${c[0]},${c[1]}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/${profile}/${waypoints}?overview=full&geometries=geojson`;
+    return fetch(url);
+  }
+
+  // OSRM 응답 → ORS GeoJSON 형식으로 정규화
+  function normalizeOsrm(data) {
+    const route = data.routes?.[0];
+    if (!route) throw new Error('경로를 찾을 수 없습니다.');
+    const leg = route.legs?.[0] ?? {};
+    return {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: route.geometry,
+        properties: {
+          summary: { distance: leg.distance ?? 0, duration: leg.duration ?? 0 },
+          ascent: 0, descent: 0,
+        },
+      }],
+    };
+  }
+
+  try {
+    // 1차: ORS
+    let geojson;
+    let usedFallback = false;
+    try {
+      const resp = await fetchOrs();
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(errBody?.error?.message || `HTTP ${resp.status}`);
       }
+      geojson = await resp.json();
+    } catch (orsErr) {
+      if (!(orsErr instanceof TypeError)) throw orsErr; // HTTP 에러는 그대로 전파
+
+      // 2차: OSRM (ORS 서버 차단 시 자동 대체)
+      const fallResp = await fetchOsrm();
+      if (!fallResp.ok) throw new Error(`경로 서버에 연결할 수 없습니다 (ORS+OSRM 모두 실패)`);
+      geojson = normalizeOsrm(await fallResp.json());
+      usedFallback = true;
     }
 
-    if (!resp.ok) {
-      const errBody = await resp.json().catch(() => ({}));
-      throw new Error(errBody?.error?.message || `HTTP ${resp.status}`);
+    drawRoute(geojson);
+    if (usedFallback) {
+      showError('⚠️ ORS 서버에 연결할 수 없어 OSRM으로 경로를 표시했습니다. 고도 데이터는 제공되지 않습니다.');
     }
-
-    drawRoute(await resp.json());
   } catch (e) {
-    let msg;
+    let msg = e.message;
     if (e instanceof TypeError) {
-      msg = `네트워크 오류 (${e.message})\n아래 버튼으로 서버 연결 상태를 확인하거나\n다른 브라우저(Samsung Internet, Firefox)로 시도해 주세요.`;
+      msg = 'ORS·OSRM 서버 모두 연결 실패.\nVPN 사용 또는 다른 네트워크로 전환해 주세요.';
       document.getElementById('ors-test-btn').style.display = 'block';
-    } else {
-      msg = e.message;
-      if (msg.includes('401') || msg.includes('403')) msg = 'API 키가 올바르지 않습니다.';
-      if (msg.includes('2010')) msg = '경로를 찾을 수 없습니다. 다른 좌표를 시도해 보세요.';
+    } else if (msg.includes('401') || msg.includes('403')) {
+      msg = 'API 키가 올바르지 않습니다.';
+    } else if (msg.includes('2010')) {
+      msg = '경로를 찾을 수 없습니다. 다른 좌표를 시도해 보세요.';
     }
     showError(msg);
   } finally {
