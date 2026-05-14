@@ -463,6 +463,9 @@
 
   <!-- 에러 -->
   <div id="error-box"></div>
+  <button id="ors-test-btn" onclick="testOrsConn()" style="display:none;font-size:11px;padding:4px 10px;margin-top:4px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;color:#6b7280;width:100%;">
+    📡 ORS 서버 연결 테스트
+  </button>
 
   <!-- 경로 찾기 -->
   <button class="btn btn-primary" id="find-btn" onclick="findRoute()" disabled>
@@ -886,24 +889,32 @@ async function findRoute() {
   }
   coords.push([goalLng, goalLat]);
 
-  const orsUrl  = `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`;
-  const orsBody = JSON.stringify({ coordinates: coords, elevation: true, instructions: false });
-
-  // ORS 요청 헬퍼: Content-Type: application/json → CORS Preflight 발생
-  // Preflight가 차단되면 TypeError "Failed to fetch" 발생
-  // → Content-Type 헤더 없이 재시도 (simple request = Preflight 불필요)
-  async function orsPost(withContentType) {
-    const opts = { method: 'POST', body: orsBody };
-    if (withContentType) opts.headers = { 'Content-Type': 'application/json' };
-    return fetch(orsUrl, opts);
-  }
-
   try {
     let resp;
-    try {
-      resp = await orsPost(true);             // 1차: 표준 방식
-    } catch {
-      resp = await orsPost(false);            // 2차: Content-Type 제거 (CORS Preflight 우회)
+
+    if (coords.length === 2) {
+      // ── 2점 경로: GET 방식 ──────────────────────────────────────────────
+      // GET은 CORS Preflight가 전혀 발생하지 않는 simple request
+      // → 모바일 Chrome 포함 모든 환경에서 동작
+      const [s, e] = coords;
+      const getUrl = `${ORS_BASE}/${selectedProfile}/geojson` +
+        `?start=${s[0]},${s[1]}&end=${e[0]},${e[1]}` +
+        `&api_key=${encodeURIComponent(apiKey)}&elevation=true`;
+      resp = await fetch(getUrl);
+
+    } else {
+      // ── 경유지 포함: POST 방식 (1차: 표준, 2차: Content-Type 제거) ──────
+      const postUrl  = `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`;
+      const postBody = JSON.stringify({ coordinates: coords, elevation: true, instructions: false });
+      try {
+        resp = await fetch(postUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: postBody,
+        });
+      } catch {
+        resp = await fetch(postUrl, { method: 'POST', body: postBody });
+      }
     }
 
     if (!resp.ok) {
@@ -915,8 +926,8 @@ async function findRoute() {
   } catch (e) {
     let msg;
     if (e instanceof TypeError) {
-      // 2차 시도까지 네트워크 오류 → CORS 외 다른 원인 (방화벽, DNS, SSL 등)
-      msg = `네트워크 오류 (${e.message})\n다른 브라우저(Samsung Internet, Firefox)로 시도하거나\nChrome 설정에서 데이터 절약 모드를 꺼 주세요.`;
+      msg = `네트워크 오류 (${e.message})\n아래 버튼으로 서버 연결 상태를 확인하거나\n다른 브라우저(Samsung Internet, Firefox)로 시도해 주세요.`;
+      document.getElementById('ors-test-btn').style.display = 'block';
     } else {
       msg = e.message;
       if (msg.includes('401') || msg.includes('403')) msg = 'API 키가 올바르지 않습니다.';
@@ -1315,7 +1326,30 @@ function showError(msg) {
   b.textContent = '⚠️ ' + msg; // innerHTML 대신 textContent — XSS 방지
   b.style.display = 'block';
 }
-function hideError() { document.getElementById('error-box').style.display = 'none'; }
+function hideError() {
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('ors-test-btn').style.display = 'none';
+}
+
+// ORS 서버 연결 테스트 (인증 불필요 GET → 네트워크 차단 여부 진단)
+async function testOrsConn() {
+  const btn = document.getElementById('ors-test-btn');
+  btn.textContent = '테스트 중…';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('https://api.openrouteservice.org/ors/v2/health');
+    if (resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      showError(`✅ ORS 서버 연결 성공 (${data.status ?? 'ready'})\n→ 서버는 정상입니다. API 키 또는 요청 좌표를 확인해 주세요.`);
+    } else {
+      showError(`ORS 서버 응답 오류: HTTP ${resp.status}\n→ ORS 서비스에 일시적 문제가 있을 수 있습니다.`);
+    }
+  } catch (err) {
+    showError(`❌ ORS 서버 연결 실패 (${err.message})\n→ 이 기기/네트워크에서 api.openrouteservice.org 접근이 차단된 것 같습니다.\n→ 다른 Wi-Fi나 모바일 데이터로 전환 후 다시 시도해 주세요.`);
+  }
+  btn.textContent = '📡 ORS 서버 연결 테스트';
+  btn.disabled = false;
+}
 
 // ──────────────────────────────────────────
 // 고도 프로필 차트
