@@ -887,11 +887,17 @@ async function findRoute() {
   coords.push([goalLng, goalLat]);
 
   try {
-    const resp = await fetch(`${ORS_BASE}/${selectedProfile}/geojson`, {
-      method: 'POST',
-      headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ coordinates: coords, elevation: true, instructions: false }),
-    });
+    // Authorization 헤더 대신 쿼리 파라미터로 인증
+    // — Android Chrome은 Authorization 헤더가 있으면 CORS Preflight를 더 엄격하게 처리해
+    //   "Failed to fetch" 오류가 발생하므로, ORS가 지원하는 api_key 쿼리 방식으로 전환
+    const resp = await fetch(
+      `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coordinates: coords, elevation: true, instructions: false }),
+      }
+    );
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
