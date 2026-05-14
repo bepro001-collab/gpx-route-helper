@@ -886,29 +886,42 @@ async function findRoute() {
   }
   coords.push([goalLng, goalLat]);
 
+  const orsUrl  = `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`;
+  const orsBody = JSON.stringify({ coordinates: coords, elevation: true, instructions: false });
+
+  // ORS 요청 헬퍼: Content-Type: application/json → CORS Preflight 발생
+  // Preflight가 차단되면 TypeError "Failed to fetch" 발생
+  // → Content-Type 헤더 없이 재시도 (simple request = Preflight 불필요)
+  async function orsPost(withContentType) {
+    const opts = { method: 'POST', body: orsBody };
+    if (withContentType) opts.headers = { 'Content-Type': 'application/json' };
+    return fetch(orsUrl, opts);
+  }
+
   try {
-    // Authorization 헤더 대신 쿼리 파라미터로 인증
-    // — Android Chrome은 Authorization 헤더가 있으면 CORS Preflight를 더 엄격하게 처리해
-    //   "Failed to fetch" 오류가 발생하므로, ORS가 지원하는 api_key 쿼리 방식으로 전환
-    const resp = await fetch(
-      `${ORS_BASE}/${selectedProfile}/geojson?api_key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coordinates: coords, elevation: true, instructions: false }),
-      }
-    );
+    let resp;
+    try {
+      resp = await orsPost(true);             // 1차: 표준 방식
+    } catch {
+      resp = await orsPost(false);            // 2차: Content-Type 제거 (CORS Preflight 우회)
+    }
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.error?.message || `HTTP ${resp.status}`);
     }
 
     drawRoute(await resp.json());
   } catch (e) {
-    let msg = e.message;
-    if (msg.includes('401') || msg.includes('403')) msg = 'API 키가 올바르지 않습니다.';
-    if (msg.includes('2010')) msg = '경로를 찾을 수 없습니다. 다른 좌표를 시도해 보세요.';
+    let msg;
+    if (e instanceof TypeError) {
+      // 2차 시도까지 네트워크 오류 → CORS 외 다른 원인 (방화벽, DNS, SSL 등)
+      msg = `네트워크 오류 (${e.message})\n다른 브라우저(Samsung Internet, Firefox)로 시도하거나\nChrome 설정에서 데이터 절약 모드를 꺼 주세요.`;
+    } else {
+      msg = e.message;
+      if (msg.includes('401') || msg.includes('403')) msg = 'API 키가 올바르지 않습니다.';
+      if (msg.includes('2010')) msg = '경로를 찾을 수 없습니다. 다른 좌표를 시도해 보세요.';
+    }
     showError(msg);
   } finally {
     setLoading(false);
