@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🗺️ GPX 경로 만들기 도우미</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: #f0f2f5;
+    }
+
+    /* ════════════════ 사이드바 ════════════════ */
+    #sidebar {
+      width: 310px;
+      min-width: 270px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 13px;
+      gap: 12px;
+      overflow-y: auto;
+      box-shadow: 2px 0 10px rgba(0,0,0,.1);
+      z-index: 10;
+    }
+
+    .app-header h1 { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+    .app-header p  { font-size: 11px; color: #999; margin-top: 2px; }
+
+    /* ── API 키 ── */
+    .api-section {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 10px 11px;
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .api-section label { font-size: 12px; font-weight: 600; color: #92400e; }
+    .api-section small { font-size: 10px; color: #78716c; line-height: 1.5; }
+    .api-section a { color: #d97706; }
+    #api-key-input {
+      padding: 6px 8px;
+      border: 1px solid #fcd34d; border-radius: 7px;
+      font-size: 11px; font-family: monospace; outline: none; width: 100%;
+      background: #fffef7;
+    }
+    #api-key-input:focus { border-color: #f59e0b; }
+
+    /* ── 산 검색 ── */
+    .search-section {
+      border: 1px solid #e0e7ff; border-radius: 10px;
+      padding: 11px 12px; background: #f8faff;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .search-label { font-size: 12px; font-weight: 600; color: #3730a3; }
+    .search-row   { display: flex; gap: 6px; }
+    #mountain-search {
+      flex: 1; padding: 7px 9px;
+      border: 1px solid #c7d2fe; border-radius: 7px;
+      font-size: 12px; outline: none; transition: border .15s;
+    }
+    #mountain-search:focus { border-color: #6366f1; }
+    .search-go-btn {
+      padding: 7px 11px;
+      background: #6366f1; color: #fff;
+      border: none; border-radius: 7px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; transition: background .15s;
+    }
+    .search-go-btn:hover    { background: #4f46e5; }
+    .search-go-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    /* 검색 결과 */
+    #search-results {
+      max-height: 320px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .search-result-item {
+      border: 1px solid #e0e7ff; border-radius: 8px;
+      background: #fff; overflow: hidden;
+      transition: box-shadow .15s;
+    }
+    .search-result-item:hover { box-shadow: 0 2px 8px rgba(99,102,241,.2); }
+    .result-main {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; cursor: pointer;
+    }
+    .result-main:hover { background: #eef2ff; }
+    .result-icon   { font-size: 17px; flex-shrink: 0; }
+    .result-text   { flex: 1; min-width: 0; }
+    .result-name   { font-size: 12px; font-weight: 600; color: #1e1b4b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-region { font-size: 10px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-type   { font-size: 9px; background: #ede9fe; color: #6d28d9; border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
+
+    /* 액션 버튼 — 평소엔 숨김, 호버 시 슬라이드 인 */
+    .result-btns {
+      display: flex;
+      border-top: 1px solid #e0e7ff;
+      max-height: 0; overflow: hidden; opacity: 0;
+      transition: max-height .2s ease, opacity .18s ease;
+    }
+    .search-result-item:hover .result-btns {
+      max-height: 36px; opacity: 1;
+    }
+    .result-btns button {
+      flex: 1; padding: 5px 0;
+      font-size: 10px; font-weight: 600;
+      border: none; background: transparent; cursor: pointer; color: #555;
+      transition: background .12s;
+    }
+    .result-btns button:not(:last-child) { border-right: 1px solid #e0e7ff; }
+    .result-btns button:nth-child(1):hover { background: #f0fdf4; color: #16a34a; }
+    .result-btns button:nth-child(2):hover { background: #fffbeb; color: #d97706; }
+    .result-btns button:nth-child(3):hover { background: #fef2f2; color: #dc2626; }
+    .no-results     { font-size: 12px; color: #888; text-align: center; padding: 10px 0; }
+    .search-loading {
+      font-size: 11px; color: #6366f1; text-align: center; padding: 8px 0;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .search-loading::before {
+      content: ''; width: 12px; height: 12px;
+      border: 2px solid #c7d2fe; border-top-color: #6366f1;
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+
+    /* ── 안내 ── */
+    .tip {
+      font-size: 11px; color: #777;
+      background: #f7f8fa; border-radius: 8px;
+      padding: 7px 10px; line-height: 1.6;
+    }
+
+    /* ── 카드 공통 ── */
+    .card {
+      border: 1px solid #e8eaed; border-radius: 10px;
+      padding: 11px 12px;
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .marker-label { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .dot-start { background: #22c55e; }
+    .dot-end   { background: #ef4444; }
+    .wp-badge {
+      background: #f59e0b; color: #fff; font-weight: 700; font-size: 10px;
+      width: 18px; height: 18px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* 좌표 입력 */
+    .coord-row { display: flex; gap: 5px; }
+    .coord-row label {
+      font-size: 11px; color: #666;
+      display: flex; flex-direction: column; flex: 1; gap: 3px;
+    }
+    input[type="number"] {
+      width: 100%; padding: 6px 7px;
+      border: 1px solid #dde1e7; border-radius: 7px;
+      font-size: 12px; outline: none; transition: border .15s;
+    }
+    input[type="number"]:focus { border-color: #3b82f6; }
+
+    /* 소버튼 */
+    .set-btn {
+      font-size: 10px; padding: 3px 7px;
+      border: 1px solid #dde1e7; border-radius: 5px;
+      background: #f7f8fa; cursor: pointer; color: #555;
+      transition: all .15s; white-space: nowrap;
+    }
+    .set-btn:hover  { background: #e8eaed; }
+    .set-btn.active { background: #eff6ff; border-color: #3b82f6; color: #2563eb; }
+
+    .del-btn {
+      font-size: 11px; padding: 3px 7px;
+      border: 1px solid #fecaca; border-radius: 5px;
+      background: #fef2f2; cursor: pointer; color: #dc2626; transition: all .15s;
+    }
+    .del-btn:hover { background: #fee2e2; }
+
+    /* ── 경유지 섹션 ── */
+    #waypoints-section { display: flex; flex-direction: column; gap: 8px; }
+
+    .section-divider {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: #aaa;
+    }
+    .section-divider::before,
+    .section-divider::after { content: ''; flex: 1; height: 1px; background: #e8eaed; }
+
+    #add-wp-btn {
+      width: 100%; padding: 8px;
+      border: 1.5px dashed #d1d5db; border-radius: 9px;
+      background: #fafafa; cursor: pointer;
+      font-size: 12px; color: #6b7280; font-weight: 500;
+      transition: all .15s; text-align: center;
+    }
+    #add-wp-btn:hover { border-color: #3b82f6; color: #2563eb; background: #eff6ff; }
+
+    .waypoint-card { border-color: #fde68a; background: #fffcf0; }
+
+    .move-btns { display: flex; gap: 2px; }
+    .move-btn {
+      font-size: 10px; padding: 2px 5px;
+      border: 1px solid #dde1e7; border-radius: 4px;
+      background: #f7f8fa; cursor: pointer; color: #555; line-height: 1.2;
+    }
+    .move-btn:hover    { background: #e8eaed; }
+    .move-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* 프로필 */
+    .profile-row { display: flex; gap: 5px; }
+    .profile-btn {
+      flex: 1; padding: 6px 3px; font-size: 11px;
+      border: 1px solid #dde1e7; border-radius: 7px;
+      background: #f7f8fa; cursor: pointer; text-align: center; transition: all .15s;
+    }
+    .profile-btn:hover    { background: #e8eaed; }
+    .profile-btn.selected { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
+
+    /* 메인 버튼 */
+    .btn {
+      width: 100%; padding: 10px;
+      border: none; border-radius: 9px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active   { transform: scale(.98); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; }
+    .btn-success { background: linear-gradient(135deg,#22c55e,#16a34a); color:#fff; }
+    .btn-outline { background: transparent; border: 1px solid #dde1e7; color: #555; font-size: 12px; }
+
+    /* 에러 */
+    #error-box {
+      display: none;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 9px; padding: 8px 11px;
+      font-size: 11px; color: #dc2626; line-height: 1.5;
+    }
+
+    /* 스피너 */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+      border-radius: 50%; animation: spin .7s linear infinite; display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ════════════════ 지도 영역 ════════════════ */
+    #map-wrap { flex: 1; position: relative; }
+    #map      { width: 100%; height: 100%; }
+
+    /* 지도 위 힌트 */
+    #map-hint {
+      position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,.65); color: #fff;
+      font-size: 12px; padding: 6px 16px; border-radius: 20px;
+      pointer-events: none; white-space: nowrap; z-index: 500;
+      opacity: 0; transition: opacity .3s;
+    }
+    #map-hint.show { opacity: 1; }
+
+    /* 지도 우상단 버튼 그룹 */
+    #map-top-right {
+      position: absolute; top: 14px; right: 14px;
+      display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+      z-index: 500;
+    }
+    #reset-btn {
+      background: #fff; border: 1px solid #dde1e7;
+      border-radius: 20px; padding: 7px 16px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12); display: none;
+      text-align: center;
+    }
+    #reset-btn:hover { background: #f7f8fa; }
+
+    /* GPX 불러오기 버튼 */
+    #gpx-import-btn {
+      background: #fff; border: 1px solid #dde1e7;
+      border-radius: 20px; padding: 7px 16px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+      white-space: nowrap; text-align: center;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    #gpx-import-btn:hover { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+
+    /* 드래그 앤 드롭 수신 중 오버레이 */
+    #map-wrap.drag-over::after {
+      content: '📂 GPX 파일을 여기에 놓으세요';
+      position: absolute; inset: 0;
+      background: rgba(59,130,246,.15);
+      border: 3px dashed #3b82f6;
+      border-radius: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: #1d4ed8;
+      pointer-events: none; z-index: 600;
+    }
+
+    /* ════════════════ 하단 오버레이 (고도 프로필 + 경로 정보 바) ════════════════ */
+    #route-overlay {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: none;           /* flex 로 전환 시 표시 */
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      z-index: 500;
+      min-width: 600px;
+    }
+
+    /* 고도 프로필 차트 */
+    #elev-chart {
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.14);
+      padding: 10px 16px 8px;
+      position: relative;
+    }
+
+    /* 경로 정보 바 */
+    #route-info-bar {
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 16px; padding: 12px 38px 12px 22px;
+      display: flex;
+      align-items: center; gap: 18px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.14);
+      white-space: nowrap;
+      position: relative;       /* 닫기 버튼 절대 위치 기준 */
+    }
+
+    .rib-item  { display: flex; align-items: center; gap: 9px; }
+    .rib-icon  { font-size: 18px; line-height: 1; }
+    .rib-texts { display: flex; flex-direction: column; gap: 1px; }
+    .rib-label { font-size: 9px; color: #9ca3af; font-weight: 500; }
+    .rib-val   { font-size: 14px; font-weight: 700; color: #111827; }
+    .rib-sep   { width: 1px; height: 30px; background: #e5e7eb; flex-shrink: 0; }
+
+    /* 정보 바 닫기 버튼 */
+    #rib-close {
+      position: absolute; top: 8px; right: 10px;
+      background: none; border: none; cursor: pointer;
+      font-size: 13px; color: #9ca3af; line-height: 1;
+      padding: 2px 4px; border-radius: 4px; transition: color .15s;
+    }
+    #rib-close:hover { color: #374151; background: #f3f4f6; }
+
+    /* 난이도 배지 */
+    .diff-pill {
+      font-size: 10px; font-weight: 700;
+      padding: 2px 9px; border-radius: 20px;
+    }
+    .diff-easy   { background: #dcfce7; color: #166534; }
+    .diff-normal { background: #fef9c3; color: #854d0e; }
+    .diff-hard   { background: #ffedd5; color: #9a3412; }
+    .diff-vhard  { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════ 사이드바 ════════════════ -->
+<div id="sidebar">
+
+  <div class="app-header">
+    <h1>🗺️ GPX 경로 만들기 도우미 <span style="font-size:10px;font-weight:400;color:#bbb;">(저작권: 이강헌)</span></h1>
+    <p>OpenStreetMap · OpenRouteService · 완전 무료</p>
+  </div>
+
+  <!-- API 키 -->
+  <div class="api-section">
+    <label>🔑 OpenRouteService API 키</label>
+    <input type="text" id="api-key-input" placeholder="API 키를 붙여넣으세요" autocomplete="off" spellcheck="false" oninput="saveApiKey()" />
+    <small>
+      무료 발급: <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener noreferrer">openrouteservice.org</a> 가입 →<br>
+      대시보드 → Tokens → <strong>Create Token</strong> (2,000회/일 무료)
+    </small>
+  </div>
+
+  <!-- 산 검색 -->
+  <div class="search-section">
+    <div class="search-label">🔍 산 · 지역 검색</div>
+    <div class="search-row">
+      <input type="text" id="mountain-search"
+             placeholder="산 이름 입력 (예: 북한산, 한라산)"
+             onkeydown="if(event.key==='Enter') searchMountain()" />
+      <button class="search-go-btn" id="search-go-btn" onclick="searchMountain()">검색</button>
+    </div>
+    <div id="search-results"></div>
+  </div>
+
+  <div class="tip">
+    💡 지도를 <strong>우클릭</strong>해 출발·경유·도착지 설정<br>
+    경유지를 추가해 다양한 등산 경로를 만들 수 있어요.
+  </div>
+
+  <!-- 출발지 -->
+  <div class="card">
+    <div class="card-title">
+      <span class="marker-label"><span class="dot dot-start"></span> 출발지</span>
+      <button class="set-btn" id="btn-set-start" onclick="startPickMode('start')">🖱 지도 선택</button>
+    </div>
+    <div class="coord-row">
+      <label>위도 (Lat)
+        <input type="number" id="start-lat" placeholder="37.5796" step="0.000001" oninput="onCoordInput()">
+      </label>
+      <label>경도 (Lng)
+        <input type="number" id="start-lng" placeholder="126.9770" step="0.000001" oninput="onCoordInput()">
+      </label>
+    </div>
+  </div>
+
+  <!-- 경유지 섹션 -->
+  <div id="waypoints-section">
+    <div class="section-divider">경유지</div>
+    <div id="waypoints-list"></div>
+    <button id="add-wp-btn" onclick="addWaypoint()">＋ 경유지 추가</button>
+  </div>
+
+  <!-- 도착지 -->
+  <div class="card">
+    <div class="card-title">
+      <span class="marker-label"><span class="dot dot-end"></span> 도착지</span>
+      <button class="set-btn" id="btn-set-end" onclick="startPickMode('end')">🖱 지도 선택</button>
+    </div>
+    <div class="coord-row">
+      <label>위도 (Lat)
+        <input type="number" id="goal-lat" placeholder="37.5512" step="0.000001" oninput="onCoordInput()">
+      </label>
+      <label>경도 (Lng)
+        <input type="number" id="goal-lng" placeholder="127.0741" step="0.000001" oninput="onCoordInput()">
+      </label>
+    </div>
+  </div>
+
+  <!-- 경로 유형 -->
+  <div class="card">
+    <div class="card-title">경로 유형</div>
+    <div class="profile-row">
+      <button class="profile-btn selected" data-profile="foot-hiking"     onclick="selectProfile(this)">🥾 등산</button>
+      <button class="profile-btn"          data-profile="foot-walking"    onclick="selectProfile(this)">🚶 도보</button>
+      <button class="profile-btn"          data-profile="cycling-regular" onclick="selectProfile(this)">🚴 자전거</button>
+    </div>
+  </div>
+
+  <!-- 에러 -->
+  <div id="error-box"></div>
+
+  <!-- 경로 찾기 -->
+  <button class="btn btn-primary" id="find-btn" onclick="findRoute()" disabled>
+    <span id="find-label">🔍 경로 찾기</span>
+    <span class="spinner" id="find-spinner"></span>
+  </button>
+
+  <!-- GPX 다운로드 -->
+  <button class="btn btn-success" id="gpx-btn" onclick="downloadGpx()" disabled>
+    💾 GPX 파일 다운로드
+  </button>
+
+  <!-- 초기화 -->
+  <button class="btn btn-outline" onclick="resetAll()">↺ 전체 초기화</button>
+
+</div>
+
+<!-- ════════════════ 지도 영역 ════════════════ -->
+<div id="map-wrap">
+  <div id="map"></div>
+
+  <!-- 지도 위 힌트 -->
+  <div id="map-hint"></div>
+
+  <!-- 우상단 버튼 그룹 -->
+  <div id="map-top-right">
+    <button id="reset-btn" onclick="resetAll()">↺ 초기화</button>
+    <button id="gpx-import-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPX 불러오기</button>
+    <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="loadGpxFile(this)">
+  </div>
+
+  <!-- 하단 오버레이: 고도 프로필 + 경로 정보 바 -->
+  <div id="route-overlay">
+
+    <!-- 고도 프로필 차트 (경로 찾기 후 동적으로 채워짐) -->
+    <div id="elev-chart"></div>
+
+    <!-- 경로 정보 바 -->
+    <div id="route-info-bar">
+      <button id="rib-close" title="닫기" onclick="document.getElementById('route-overlay').style.display='none'">✕</button>
+    <div class="rib-item">
+      <span class="rib-icon">📏</span>
+      <div class="rib-texts">
+        <span class="rib-label">총 거리</span>
+        <span class="rib-val" id="rib-distance">-</span>
+      </div>
+    </div>
+    <div class="rib-sep"></div>
+    <div class="rib-item">
+      <span class="rib-icon">⏱</span>
+      <div class="rib-texts">
+        <span class="rib-label">예상 시간</span>
+        <span class="rib-val" id="rib-duration">-</span>
+      </div>
+    </div>
+    <div class="rib-sep"></div>
+    <div class="rib-item">
+      <span class="rib-icon">⬆</span>
+      <div class="rib-texts">
+        <span class="rib-label">상승 고도</span>
+        <span class="rib-val" id="rib-ascent">-</span>
+      </div>
+    </div>
+    <div class="rib-sep"></div>
+    <div class="rib-item">
+      <span class="rib-icon">⬇</span>
+      <div class="rib-texts">
+        <span class="rib-label">하강 고도</span>
+        <span class="rib-val" id="rib-descent">-</span>
+      </div>
+    </div>
+    <div class="rib-sep"></div>
+    <div class="rib-item">
+      <span class="rib-icon">🥾</span>
+      <div class="rib-texts">
+        <span class="rib-label">난이도</span>
+        <span class="rib-val" id="rib-diff">-</span>
+      </div>
+    </div>
+    <div class="rib-sep"></div>
+    <div class="rib-item">
+      <span class="rib-icon">↗</span>
+      <div class="rib-texts">
+        <span class="rib-label">평균 경사</span>
+        <span class="rib-val" id="rib-avg-slope">-</span>
+      </div>
+    </div>
+    <div class="rib-sep"></div>
+    <div class="rib-item">
+      <span class="rib-icon">🔺</span>
+      <div class="rib-texts">
+        <span class="rib-label">최대 경사</span>
+        <span class="rib-val" id="rib-max-slope">-</span>
+      </div>
+    </div>
+    </div><!-- /#route-info-bar -->
+  </div><!-- /#route-overlay -->
+</div><!-- /#map-wrap -->
+
+<!-- ════════════════ 스크립트 ════════════════ -->
+<script>
+// ──────────────────────────────────────────
+// 상태
+// ──────────────────────────────────────────
+let map, startMarker, endMarker, routeLayer, viewMarker, hoverRouteMarker;
+let pickMode        = null;
+let routePoints     = [];
+let selectedProfile = 'foot-hiking';
+
+// 경유지
+let wpIds    = [];
+let wpMarkers = {};
+let wpCounter = 0;
+
+const ORS_BASE = 'https://api.openrouteservice.org/v2/directions';
+
+// ──────────────────────────────────────────
+// 공용 유틸 함수
+// ──────────────────────────────────────────
+
+/** Haversine 거리 (미터) — drawElevChart·parseAndDisplayGpx 공용 */
+function haversine(a, b) {
+  const R = 6371000;
+  const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
+  const Δφ = (b.lat - a.lat) * Math.PI / 180;
+  const Δλ = (b.lng - a.lng) * Math.PI / 180;
+  const s  = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+/** 거리 포매터 → "1.2 km" / "450 m" */
+const distFmt = v => v >= 1000 ? (v / 1000).toFixed(1) + ' km' : Math.round(v) + ' m';
+
+/** 초(sec) → 한국어 시간 문자열 */
+const durFmt = s => s >= 3600
+  ? `${Math.floor(s/3600)}시간 ${Math.floor((s%3600)/60)}분`
+  : `${Math.round(s/60)}분`;
+
+/** HTML 특수문자 이스케이프 (XSS 방지) */
+const htmlEsc = s => String(s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/** 난이도 계산 — ascent(m), dist(m) → { cls, text } */
+function calcDifficulty(ascent, dist) {
+  const perKm = ascent / Math.max(dist / 1000, 0.1);
+  if (perKm >= 200) return { cls: 'diff-vhard', text: '매우 어려움' };
+  if (perKm >= 100) return { cls: 'diff-hard',  text: '어려움'     };
+  if (perKm >= 50)  return { cls: 'diff-normal', text: '보통'       };
+  return               { cls: 'diff-easy',  text: '쉬움'       };
+}
+
+/** 경로 정보 바 일괄 업데이트 */
+function updateInfoBar({ dist, durText, ascent, descent }) {
+  document.getElementById('rib-distance').textContent = distFmt(dist);
+  document.getElementById('rib-duration').textContent = durText;
+  document.getElementById('rib-ascent').textContent   = '+' + Math.round(ascent) + ' m';
+  document.getElementById('rib-descent').textContent  = '-' + Math.round(descent) + ' m';
+  const { cls, text } = calcDifficulty(ascent, dist);
+  const diffEl = document.getElementById('rib-diff');
+  diffEl.textContent = text;
+  diffEl.className   = 'rib-val diff-pill ' + cls;
+}
+
+// API 키 복원
+document.getElementById('api-key-input').value = localStorage.getItem('ors_api_key') || '';
+function getApiKey() { return document.getElementById('api-key-input').value.trim(); }
+function saveApiKey() { localStorage.setItem('ors_api_key', getApiKey()); onCoordInput(); }
+
+// ──────────────────────────────────────────
+// 지도 초기화
+// ──────────────────────────────────────────
+function initMap() {
+  map = L.map('map').setView([37.5665, 126.9780], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(map);
+
+  map.on('contextmenu', e => {
+    e.originalEvent.preventDefault();
+    showContextMenu(e.latlng, e.containerPoint);
+  });
+  map.on('click', e => {
+    if (ctxMenu) { closeContextMenu(); return; }
+    if (!pickMode) return;
+    applyPickedCoord(pickMode, e.latlng);
+    clearPickMode();
+  });
+}
+
+// ──────────────────────────────────────────
+// 우클릭 컨텍스트 메뉴
+// ──────────────────────────────────────────
+let ctxMenu = null;
+
+function showContextMenu(latlng, pt) {
+  closeContextMenu();
+  const rect = map.getContainer().getBoundingClientRect();
+  ctxMenu = document.createElement('div');
+  Object.assign(ctxMenu.style, {
+    position: 'fixed',
+    top:  (pt.y + rect.top  + 4) + 'px',
+    left: (pt.x + rect.left + 4) + 'px',
+    background: '#fff', border: '1px solid #dde1e7',
+    borderRadius: '10px', boxShadow: '0 4px 18px rgba(0,0,0,.18)',
+    zIndex: 9999, overflow: 'hidden', minWidth: '158px', fontSize: '13px',
+  });
+
+  [
+    { label: '🟢 출발지로 설정',  fn: () => applyPickedCoord('start', latlng) },
+    { label: '🟡 경유지로 추가',  fn: () => addWaypoint(latlng)               },
+    { label: '🔴 도착지로 설정',  fn: () => applyPickedCoord('end',   latlng) },
+  ].forEach(({ label, fn }) => {
+    const el = document.createElement('div');
+    el.textContent = label;
+    Object.assign(el.style, { padding: '9px 14px', cursor: 'pointer' });
+    el.onmouseenter = () => el.style.background = '#f0f7ff';
+    el.onmouseleave = () => el.style.background = '';
+    el.onclick = () => { fn(); closeContextMenu(); };
+    ctxMenu.appendChild(el);
+  });
+
+  document.body.appendChild(ctxMenu);
+  setTimeout(() => document.addEventListener('click', closeContextMenu, { once: true }), 10);
+}
+function closeContextMenu() {
+  if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+}
+
+// ──────────────────────────────────────────
+// 좌표 적용
+// ──────────────────────────────────────────
+function applyPickedCoord(type, latlng) {
+  if (type === 'start') {
+    document.getElementById('start-lat').value = latlng.lat.toFixed(6);
+    document.getElementById('start-lng').value = latlng.lng.toFixed(6);
+    placeEndpointMarker('start', latlng);
+  } else if (type === 'end') {
+    document.getElementById('goal-lat').value = latlng.lat.toFixed(6);
+    document.getElementById('goal-lng').value = latlng.lng.toFixed(6);
+    placeEndpointMarker('end', latlng);
+  } else if (type.startsWith('wp-')) {
+    applyWaypointCoord(parseInt(type.slice(3)), latlng);
+  }
+  onCoordInput();
+  showResetBtn();
+}
+
+// ──────────────────────────────────────────
+// 출발·도착 마커
+// ──────────────────────────────────────────
+function placeEndpointMarker(type, latlng) {
+  const isStart = type === 'start';
+  const icon = makeCircleIcon(isStart ? '#22c55e' : '#ef4444', isStart ? 'S' : 'E', 13);
+  if (isStart) {
+    if (startMarker) map.removeLayer(startMarker);
+    startMarker = L.marker(latlng, { icon }).addTo(map).bindTooltip('출발지');
+  } else {
+    if (endMarker) map.removeLayer(endMarker);
+    endMarker = L.marker(latlng, { icon }).addTo(map).bindTooltip('도착지');
+  }
+}
+
+// ──────────────────────────────────────────
+// 경유지
+// ──────────────────────────────────────────
+function addWaypoint(latlng = null) {
+  const id = wpCounter++;
+  wpIds.push(id);
+
+  const card = document.createElement('div');
+  card.className = 'card waypoint-card';
+  card.id = `wp-card-${id}`;
+  card.innerHTML = `
+    <div class="card-title">
+      <span class="marker-label">
+        <span class="wp-badge" id="wp-badge-${id}">?</span> 경유지
+      </span>
+      <div style="display:flex;gap:4px;align-items:center">
+        <div class="move-btns">
+          <button class="move-btn" id="wp-up-${id}"   onclick="moveWaypoint(${id},-1)" title="위로">▲</button>
+          <button class="move-btn" id="wp-down-${id}" onclick="moveWaypoint(${id},+1)" title="아래로">▼</button>
+        </div>
+        <button class="set-btn" onclick="startPickMode('wp-${id}')">🖱 지도 선택</button>
+        <button class="del-btn" onclick="removeWaypoint(${id})">✕</button>
+      </div>
+    </div>
+    <div class="coord-row">
+      <label>위도 (Lat)
+        <input type="number" id="wp-lat-${id}" step="0.000001" placeholder="위도 입력" oninput="onCoordInput()">
+      </label>
+      <label>경도 (Lng)
+        <input type="number" id="wp-lng-${id}" step="0.000001" placeholder="경도 입력" oninput="onCoordInput()">
+      </label>
+    </div>`;
+
+  document.getElementById('waypoints-list').appendChild(card);
+  refreshWaypointUI();
+  if (latlng) applyWaypointCoord(id, latlng); // 내부에서 onCoordInput 호출
+  else onCoordInput();
+  showResetBtn();
+}
+
+function removeWaypoint(id) {
+  if (wpMarkers[id]) { map.removeLayer(wpMarkers[id]); delete wpMarkers[id]; }
+  document.getElementById(`wp-card-${id}`)?.remove();
+  wpIds = wpIds.filter(i => i !== id);
+  refreshWaypointUI(); onCoordInput();
+}
+
+function moveWaypoint(id, dir) {
+  const idx = wpIds.indexOf(id);
+  const nIdx = idx + dir;
+  if (nIdx < 0 || nIdx >= wpIds.length) return;
+  [wpIds[idx], wpIds[nIdx]] = [wpIds[nIdx], wpIds[idx]];
+  const list = document.getElementById('waypoints-list');
+  wpIds.map(i => document.getElementById(`wp-card-${i}`)).forEach(c => list.appendChild(c));
+  refreshWaypointUI();
+}
+
+function applyWaypointCoord(id, latlng) {
+  document.getElementById(`wp-lat-${id}`).value = latlng.lat.toFixed(6);
+  document.getElementById(`wp-lng-${id}`).value = latlng.lng.toFixed(6);
+  placeWaypointMarker(id, latlng);
+  onCoordInput();
+}
+
+function placeWaypointMarker(id, latlng) {
+  const num = wpIds.indexOf(id) + 1;
+  if (wpMarkers[id]) map.removeLayer(wpMarkers[id]);
+  wpMarkers[id] = L.marker(latlng, { icon: makeCircleIcon('#f59e0b', String(num), 11) })
+    .addTo(map).bindTooltip(`경유지 ${num}`);
+}
+
+function refreshWaypointUI() {
+  wpIds.forEach((id, idx) => {
+    const badge = document.getElementById(`wp-badge-${id}`);
+    if (badge) badge.textContent = idx + 1;
+    const up   = document.getElementById(`wp-up-${id}`);
+    const down = document.getElementById(`wp-down-${id}`);
+    if (up)   up.disabled   = (idx === 0);
+    if (down) down.disabled = (idx === wpIds.length - 1);
+    // 마커 아이콘(번호)만 갱신 — 마커 제거/추가 없이 setIcon으로 처리
+    if (wpMarkers[id]) {
+      wpMarkers[id].setIcon(makeCircleIcon('#f59e0b', String(idx + 1), 11));
+    }
+  });
+}
+
+// ──────────────────────────────────────────
+// 픽 모드
+// ──────────────────────────────────────────
+function startPickMode(type) {
+  pickMode = type;
+  let hint;
+  if      (type === 'start')      hint = '🟢 지도를 클릭해 출발지 선택';
+  else if (type === 'end')        hint = '🔴 지도를 클릭해 도착지 선택';
+  else { const n = wpIds.indexOf(parseInt(type.slice(3)))+1; hint = `🟡 경유지 ${n} 위치 선택`; }
+  showHint(hint);
+  document.getElementById('btn-set-start').classList.toggle('active', type === 'start');
+  document.getElementById('btn-set-end').classList.toggle('active',   type === 'end');
+  map.getContainer().style.cursor = 'crosshair';
+}
+function clearPickMode() {
+  pickMode = null;
+  document.getElementById('btn-set-start').classList.remove('active');
+  document.getElementById('btn-set-end').classList.remove('active');
+  map.getContainer().style.cursor = '';
+  setTimeout(hideHint, 800);
+}
+function showHint(msg) { const h=document.getElementById('map-hint'); h.textContent=msg; h.classList.add('show'); }
+function hideHint()     { document.getElementById('map-hint').classList.remove('show'); }
+function showResetBtn() { document.getElementById('reset-btn').style.display = 'block'; }
+
+// ──────────────────────────────────────────
+// 프로필
+// ──────────────────────────────────────────
+function selectProfile(btn) {
+  document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedProfile = btn.dataset.profile;
+}
+
+// ──────────────────────────────────────────
+// 입력 유효성
+// ──────────────────────────────────────────
+function onCoordInput() {
+  const hasEndpoints =
+    document.getElementById('start-lat').value &&
+    document.getElementById('start-lng').value &&
+    document.getElementById('goal-lat').value  &&
+    document.getElementById('goal-lng').value;
+  const wpOk = wpIds.every(id =>
+    (document.getElementById(`wp-lat-${id}`).value && document.getElementById(`wp-lng-${id}`).value) ||
+    (!document.getElementById(`wp-lat-${id}`).value && !document.getElementById(`wp-lng-${id}`).value)
+  );
+  document.getElementById('find-btn').disabled = !(hasEndpoints && wpOk && getApiKey());
+}
+
+// ──────────────────────────────────────────
+// 경로 찾기
+// ──────────────────────────────────────────
+async function findRoute() {
+  hideError(); setLoading(true);
+  routePoints = [];
+  document.getElementById('gpx-btn').disabled = true;
+  document.getElementById('route-overlay').style.display = 'none';
+
+  const apiKey   = getApiKey();
+  const startLat = parseFloat(document.getElementById('start-lat').value);
+  const startLng = parseFloat(document.getElementById('start-lng').value);
+  const goalLat  = parseFloat(document.getElementById('goal-lat').value);
+  const goalLng  = parseFloat(document.getElementById('goal-lng').value);
+
+  const coords = [[startLng, startLat]];
+  for (const id of wpIds) {
+    const lat = parseFloat(document.getElementById(`wp-lat-${id}`).value);
+    const lng = parseFloat(document.getElementById(`wp-lng-${id}`).value);
+    if (!isNaN(lat) && !isNaN(lng)) coords.push([lng, lat]);
+  }
+  coords.push([goalLng, goalLat]);
+
+  try {
+    const resp = await fetch(`${ORS_BASE}/${selectedProfile}/geojson`, {
+      method: 'POST',
+      headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coordinates: coords, elevation: true, instructions: false }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+    }
+
+    drawRoute(await resp.json());
+  } catch (e) {
+    let msg = e.message;
+    if (msg.includes('401') || msg.includes('403')) msg = 'API 키가 올바르지 않습니다.';
+    if (msg.includes('2010')) msg = '경로를 찾을 수 없습니다. 다른 좌표를 시도해 보세요.';
+    showError(msg);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ──────────────────────────────────────────
+// 경로 그리기 + 하단 정보 바 업데이트
+// ──────────────────────────────────────────
+function drawRoute(geojson) {
+  if (routeLayer) map.removeLayer(routeLayer);
+  // 검색 핀이 남아있으면 경로 그리기와 함께 제거
+  if (viewMarker) { map.removeLayer(viewMarker); viewMarker = null; }
+
+  const feature = geojson.features?.[0];
+  if (!feature) { showError('경로 데이터가 없습니다.'); return; }
+
+  routeLayer = L.geoJSON(feature, {
+    style: { color: '#3b82f6', weight: 5, opacity: 0.88 },
+  }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [60, 60] });
+
+  // 좌표 저장
+  const coords = feature.geometry.coordinates;
+  routePoints  = coords.map(c => ({ lat: c[1], lng: c[0], ele: c[2] ?? 0 }));
+
+  // 통계
+  const props   = feature.properties ?? {};
+  const summary = props.summary ?? {};
+  const dist    = summary.distance ?? 0;
+  const dur     = summary.duration ?? 0;
+  const ascent  = props.ascent  ?? 0;
+  const descent = props.descent ?? 0;
+
+  updateInfoBar({ dist, durText: durFmt(dur), ascent, descent });
+
+  document.getElementById('route-overlay').style.display = 'flex';
+  document.getElementById('gpx-btn').disabled = false;
+  drawElevChart(routePoints);
+  showResetBtn();
+}
+
+// ──────────────────────────────────────────
+// GPX 다운로드
+// ──────────────────────────────────────────
+function downloadGpx() {
+  if (!routePoints.length) return;
+  const label = { 'foot-hiking':'등산경로','foot-walking':'도보경로','cycling-regular':'자전거경로' }[selectedProfile] || '경로';
+  const now   = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+
+  const wptTags = wpIds.map((id, idx) => {
+    const lat = document.getElementById(`wp-lat-${id}`).value;
+    const lng = document.getElementById(`wp-lng-${id}`).value;
+    if (!lat || !lng) return '';
+    return `  <wpt lat="${(+lat).toFixed(7)}" lon="${(+lng).toFixed(7)}">\n    <name>경유지 ${idx+1}</name>\n  </wpt>`;
+  }).filter(Boolean).join('\n');
+
+  const trkpts = routePoints.map(p =>
+    `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lng.toFixed(7)}">\n        <ele>${p.ele.toFixed(1)}</ele>\n      </trkpt>`
+  ).join('\n');
+
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GPX경로도우미"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <name>${label}</name>
+    <time>${now}</time>
+  </metadata>
+  <wpt lat="${routePoints[0].lat.toFixed(7)}" lon="${routePoints[0].lng.toFixed(7)}">
+    <name>출발지</name>
+  </wpt>
+${wptTags ? wptTags + '\n' : ''}  <wpt lat="${routePoints.at(-1).lat.toFixed(7)}" lon="${routePoints.at(-1).lng.toFixed(7)}">
+    <name>도착지</name>
+  </wpt>
+  <trk>
+    <name>${label}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url  = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${label}_${now.slice(0,10)}.gpx` });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000); // 비동기 다운로드 시작 후 해제
+}
+
+// ──────────────────────────────────────────
+// 전체 초기화
+// ──────────────────────────────────────────
+function resetAll() {
+  // 진행 중인 산 검색 요청 취소
+  if (_searchAbortCtrl) { _searchAbortCtrl.abort(); _searchAbortCtrl = null; }
+  ['start-lat','start-lng','goal-lat','goal-lng'].forEach(id => document.getElementById(id).value = '');
+  if (startMarker)      { map.removeLayer(startMarker);      startMarker      = null; }
+  if (endMarker)        { map.removeLayer(endMarker);        endMarker        = null; }
+  if (routeLayer)       { map.removeLayer(routeLayer);       routeLayer       = null; }
+  if (viewMarker)       { map.removeLayer(viewMarker);       viewMarker       = null; }
+  if (hoverRouteMarker) { map.removeLayer(hoverRouteMarker); hoverRouteMarker = null; }
+  [...wpIds].forEach(id => removeWaypoint(id));
+  routePoints = [];
+  document.getElementById('route-overlay').style.display = 'none';
+  document.getElementById('elev-chart').innerHTML = '';
+  ['rib-distance','rib-duration','rib-ascent','rib-descent','rib-avg-slope','rib-max-slope'].forEach(
+    id => { const el = document.getElementById(id); if (el) el.textContent = '-'; }
+  );
+  document.getElementById('rib-diff').textContent = '-';
+  document.getElementById('rib-diff').className   = 'rib-val';
+  document.getElementById('gpx-btn').disabled  = true;
+  document.getElementById('find-btn').disabled  = true;
+  document.getElementById('reset-btn').style.display  = 'none';
+  document.getElementById('search-results').innerHTML = '';
+  document.getElementById('mountain-search').value    = '';
+  hideError();
+  map.setView([37.5665, 126.9780], 12);
+}
+
+// ──────────────────────────────────────────
+// GPX 파일 불러오기
+// ──────────────────────────────────────────
+function loadGpxFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = ''; // 같은 파일 재선택 허용
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      parseAndDisplayGpx(e.target.result, file.name);
+    } catch (err) {
+      showError('GPX 파일을 읽을 수 없습니다: ' + err.message);
+    }
+  };
+  reader.onerror = () => showError('파일 읽기에 실패했습니다.');
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseAndDisplayGpx(xmlStr, fileName) {
+  // ── XML 파싱 ──
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  if (xml.querySelector('parsererror')) throw new Error('XML 형식이 올바르지 않습니다');
+
+  // ── 트랙 포인트 추출 (trkpt 우선, 없으면 rtept 폴백) ──
+  const trkpts = [...xml.querySelectorAll('trkpt')];
+  const rtepts = trkpts.length ? [] : [...xml.querySelectorAll('rtept')];
+  const rawPts = trkpts.length ? trkpts : rtepts;
+  if (!rawPts.length) throw new Error('경로 데이터(trkpt/rtept)가 없습니다. 트랙 또는 루트를 포함한 GPX 파일인지 확인하세요.');
+
+  const points = rawPts.map(pt => ({
+    lat: parseFloat(pt.getAttribute('lat')),
+    lng: parseFloat(pt.getAttribute('lon')),
+    ele: parseFloat(pt.querySelector('ele')?.textContent ?? '0') || 0,
+    time: pt.querySelector('time')?.textContent ?? null,
+  })).filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+
+  if (points.length < 2) throw new Error('유효한 좌표가 2개 미만입니다.');
+
+  // ── 기존 레이어 정리 ──
+  if (routeLayer)       { map.removeLayer(routeLayer);       routeLayer       = null; }
+  if (startMarker)      { map.removeLayer(startMarker);      startMarker      = null; }
+  if (endMarker)        { map.removeLayer(endMarker);        endMarker        = null; }
+  if (viewMarker)       { map.removeLayer(viewMarker);       viewMarker       = null; }
+  if (hoverRouteMarker) { map.removeLayer(hoverRouteMarker); hoverRouteMarker = null; }
+  [...wpIds].forEach(id => removeWaypoint(id));
+
+  // ── 경로 폴리라인 그리기 (보라색으로 GPX 구분) ──
+  const latlngs = points.map(p => [p.lat, p.lng]);
+  routeLayer = L.polyline(latlngs, { color: '#8b5cf6', weight: 5, opacity: 0.88 }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [60, 60] });
+
+  // ── 출발·도착 마커 ──
+  startMarker = L.marker([points[0].lat, points[0].lng],
+    { icon: makeCircleIcon('#22c55e', 'S', 12) }).addTo(map).bindTooltip('출발지');
+  endMarker   = L.marker([points.at(-1).lat, points.at(-1).lng],
+    { icon: makeCircleIcon('#ef4444', 'E', 12) }).addTo(map).bindTooltip('도착지');
+
+  routePoints = points;
+
+  // ── 통계 계산 ──
+  let dist = 0, ascent = 0, descent = 0;
+  for (let i = 1; i < points.length; i++) {
+    dist += haversine(points[i-1], points[i]);
+    const de = points[i].ele - points[i-1].ele;
+    if (de > 0) ascent += de; else descent -= de;
+  }
+
+  // ── 소요 시간 (time 태그가 있으면 실측값, 없으면 '-') ──
+  let durText = '-';
+  if (points[0].time && points.at(-1).time) {
+    const sec = (new Date(points.at(-1).time) - new Date(points[0].time)) / 1000;
+    if (sec > 0) durText = durFmt(sec);
+  }
+
+  // ── 정보 바 업데이트 ──
+  updateInfoBar({ dist, durText, ascent, descent });
+
+  // ── 오버레이 표시 및 고도 차트 그리기 ──
+  document.getElementById('route-overlay').style.display = 'flex';
+  document.getElementById('gpx-btn').disabled = false;
+  drawElevChart(routePoints);
+  showResetBtn();
+  hideError();
+}
+
+// ──────────────────────────────────────────
+// 산 검색 (Nominatim)
+// ──────────────────────────────────────────
+// 진행 중인 산 검색 요청을 취소하기 위한 컨트롤러
+let _searchAbortCtrl = null;
+
+async function searchMountain() {
+  const q = document.getElementById('mountain-search').value.trim();
+  if (!q) return;
+
+  // 이전 요청이 아직 진행 중이면 취소
+  if (_searchAbortCtrl) _searchAbortCtrl.abort();
+  _searchAbortCtrl = new AbortController();
+  const signal = _searchAbortCtrl.signal;
+
+  // 8초 타임아웃
+  const timeoutId = setTimeout(() => _searchAbortCtrl.abort(), 8000);
+
+  const container = document.getElementById('search-results');
+  const goBtn     = document.getElementById('search-go-btn');
+  container.innerHTML = '<div class="search-loading">검색 중</div>';
+  goBtn.disabled = true;
+
+  try {
+    const params = new URLSearchParams({
+      q, format: 'json', countrycodes: 'kr',
+      limit: 10, 'accept-language': 'ko', dedupe: 1, addressdetails: 1,
+    });
+    const resp = await fetch('https://nominatim.openstreetmap.org/search?' + params, {
+      headers: { 'User-Agent': 'GPX-Route-Helper/1.0 (bepro001@gmail.com)' },
+      signal,
+    });
+    clearTimeout(timeoutId);
+    if (!resp.ok) throw new Error(`서버 오류 (${resp.status})`);
+    renderSearchResults(await resp.json());
+  } catch (e) {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'no-results';
+    errDiv.textContent = e.name === 'AbortError'
+      ? '⚠️ 검색 시간이 초과되었습니다. 다시 시도해 주세요.'
+      : '⚠️ ' + e.message;
+    container.innerHTML = '';
+    container.appendChild(errDiv);
+  } finally {
+    clearTimeout(timeoutId);
+    goBtn.disabled = false;
+  }
+}
+
+function renderSearchResults(results) {
+  const container = document.getElementById('search-results');
+  container.innerHTML = '';
+
+  if (!results.length) {
+    const el = document.createElement('div');
+    el.className = 'no-results';
+    el.textContent = '검색 결과가 없습니다.';
+    container.appendChild(el);
+    return;
+  }
+
+  // 검색어·정규식을 루프 밖에서 한 번만 생성
+  const q  = document.getElementById('mountain-search').value.trim();
+  const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+
+  const sorted = [...results].sort((a, b) => {
+    const s = r => r.type==='peak'?3:r.class==='natural'?2:r.class==='place'?1:0;
+    return s(b) - s(a);
+  });
+
+  sorted.forEach(item => {
+    const addr   = item.address || {};
+    const name   = item.display_name.split(', ')[0];
+    const region = [addr.province||addr.state, addr.city||addr.county||addr.town]
+                    .filter(Boolean).join(' · ')
+                   || item.display_name.split(', ').slice(1,3).join(', ');
+    const lat    = parseFloat(item.lat);
+    const lng    = parseFloat(item.lon);
+    const typeLabel = { peak:'봉우리',mountain:'산',hill:'언덕',locality:'지역' }[item.type] || item.type || item.class || '장소';
+    const icon   = (item.class==='natural'||item.type==='peak') ? '🏔️' : '📍';
+
+    // 모듈 레벨 htmlEsc 사용 — 이스케이프된 이름에서 검색어 하이라이트
+    const hl = htmlEsc(name).replace(re, '<mark style="background:#fef08a;border-radius:2px">$1</mark>');
+
+    const el = document.createElement('div');
+    el.className = 'search-result-item';
+
+    // 상단 클릭 영역 (지도 뷰 이동)
+    const mainDiv = document.createElement('div');
+    mainDiv.className = 'result-main';
+    mainDiv.innerHTML = `
+      <span class="result-icon">${icon}</span>
+      <div class="result-text">
+        <div class="result-name">${hl}</div>
+        <div class="result-region">${htmlEsc(region)}</div>
+      </div>
+      <span class="result-type">${htmlEsc(typeLabel)}</span>`;
+    mainDiv.addEventListener('click', () => viewSearchResult(lat, lng, name));
+    el.appendChild(mainDiv);
+
+    // 하단 버튼 영역 — inline onclick 대신 addEventListener 사용 (특수문자 안전)
+    const btnsDiv = document.createElement('div');
+    btnsDiv.className = 'result-btns';
+    [
+      { label: '🟢 출발지', type: 'start'    },
+      { label: '🟡 경유지', type: 'waypoint' },
+      { label: '🔴 도착지', type: 'end'      },
+    ].forEach(({ label, type }) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); // result-main click 방지
+        setFromSearch(type, lat, lng, name);
+      });
+      btnsDiv.appendChild(btn);
+    });
+    el.appendChild(btnsDiv);
+
+    container.appendChild(el);
+  });
+}
+
+function viewSearchResult(lat, lng, name) {
+  if (viewMarker) { map.removeLayer(viewMarker); viewMarker = null; }
+  const safeName = htmlEsc(name);
+  const icon = L.divIcon({
+    html: `<div style="background:#7c3aed;color:#fff;font-size:11px;font-weight:700;
+      padding:4px 9px;border-radius:12px;border:2px solid #fff;
+      box-shadow:0 2px 10px rgba(124,58,237,.45);white-space:nowrap;
+      max-width:140px;overflow:hidden;text-overflow:ellipsis;">${safeName}</div>`,
+    iconAnchor: [0, 28], className: '',
+  });
+  viewMarker = L.marker([lat, lng], { icon }).addTo(map)
+    .bindPopup(`<b>${safeName}</b><br><small>${lat.toFixed(5)}, ${lng.toFixed(5)}</small>`)
+    .openPopup();
+  map.setView([lat, lng], 13, { animate: true });
+  showResetBtn();
+}
+
+function setFromSearch(type, lat, lng, name) {
+  const latlng = L.latLng(lat, lng);
+  if (type === 'start') {
+    document.getElementById('start-lat').value = lat.toFixed(6);
+    document.getElementById('start-lng').value = lng.toFixed(6);
+    placeEndpointMarker('start', latlng);
+  } else if (type === 'end') {
+    document.getElementById('goal-lat').value = lat.toFixed(6);
+    document.getElementById('goal-lng').value = lng.toFixed(6);
+    placeEndpointMarker('end', latlng);
+  } else {
+    addWaypoint(latlng);
+  }
+  if (viewMarker) { map.removeLayer(viewMarker); viewMarker = null; }
+  map.setView(latlng, 13, { animate: true });
+  onCoordInput();
+  showResetBtn();
+}
+
+// ──────────────────────────────────────────
+// 유틸
+// ──────────────────────────────────────────
+function makeCircleIcon(color, text, fontSize) {
+  return L.divIcon({
+    html: `<div style="background:${color};color:#fff;font-weight:700;font-size:${fontSize}px;
+      width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+      justify-content:center;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);">${text}</div>`,
+    iconSize: [30,30], iconAnchor: [15,15], className: '',
+  });
+}
+function setLoading(on) {
+  document.getElementById('find-label').style.display   = on ? 'none' : 'flex';
+  document.getElementById('find-spinner').style.display = on ? 'block': 'none';
+  if (on) {
+    document.getElementById('find-btn').disabled = true;
+  } else {
+    onCoordInput(); // 좌표·API 키 상태를 다시 검사해 버튼 활성화 여부 결정
+  }
+}
+function showError(msg) {
+  const b = document.getElementById('error-box');
+  b.textContent = '⚠️ ' + msg; // innerHTML 대신 textContent — XSS 방지
+  b.style.display = 'block';
+}
+function hideError() { document.getElementById('error-box').style.display = 'none'; }
+
+// ──────────────────────────────────────────
+// 고도 프로필 차트
+// ──────────────────────────────────────────
+function drawElevChart(points) {
+  const container = document.getElementById('elev-chart');
+  if (!points || points.length < 2) { container.innerHTML = ''; return; }
+
+  // ── 호버 마커 초기화 (재렌더링 시 이전 마커 제거) ──
+  if (hoverRouteMarker) { map.removeLayer(hoverRouteMarker); hoverRouteMarker = null; }
+
+  // ── 누적 거리 계산 (origIdx: routePoints 원본 인덱스 보존) ──
+  let cum = 0;
+  const raw = [];
+  for (let i = 0; i < points.length; i++) {
+    if (i > 0) cum += haversine(points[i - 1], points[i]);
+    raw.push({ dist: cum, ele: points[i].ele, origIdx: i });
+  }
+  const totalDist = cum;
+
+  // ── 고도 이동평균 스무딩 (DEM 수직 노이즈 제거, 반경 3 → 총 7포인트 윈도우) ──
+  // SRTM 기반 고도는 산악지형에서 ±5~16 m 수직 오차를 가지므로
+  // 스무딩 없이는 촘촘한 좌표점에서 100%↑ 가짜 경사가 발생함
+  const WIN = 3;
+  const smoothed = raw.map((d, i) => {
+    const s = Math.max(0, i - WIN), e = Math.min(raw.length - 1, i + WIN);
+    const avgEle = raw.slice(s, e + 1).reduce((sum, p) => sum + p.ele, 0) / (e - s + 1);
+    return { dist: d.dist, ele: avgEle, origIdx: d.origIdx };
+  });
+
+  // ── 다운샘플 (최대 300포인트) ──
+  const MAX = 300;
+  const step = Math.ceil(smoothed.length / MAX);
+  const data = smoothed.length > MAX
+    ? smoothed.filter((_, i) => i % step === 0 || i === smoothed.length - 1)
+    : smoothed;
+
+  // ── 구간별 경사도 계산 ──
+  // slopes[i] = i번째 세그먼트(data[i-1]→data[i])의 경사도 정보
+  const slopes = [];
+  let wSum = 0, wTot = 0, maxSlope = 0;
+  for (let i = 1; i < data.length; i++) {
+    const hDist   = Math.max(data[i].dist - data[i - 1].dist, 0.1); // 수평 거리 (0 방지)
+    const eleDiff = data[i].ele - data[i - 1].ele;                   // 고도 차 (부호 있음)
+    const pct     = eleDiff / hDist * 100;                           // 경사도 (%)
+    const absPct  = Math.abs(pct);
+    slopes.push({ pct, abs: absPct });
+    wSum += absPct * hDist;
+    wTot += hDist;
+    if (hDist > 30 && absPct > maxSlope) maxSlope = absPct; // 30 m 이상 구간만 후보 (SRTM 격자 해상도 기준)
+  }
+  const avgSlope = wTot > 0 ? wSum / wTot : 0;
+
+  // 정보 바 업데이트
+  document.getElementById('rib-avg-slope').textContent = avgSlope.toFixed(1) + '%';
+  document.getElementById('rib-max-slope').textContent = maxSlope.toFixed(1) + '%';
+
+  // ── 경사도 → 색상 ──
+  const slopeColor = abs =>
+    abs < 5  ? '#22c55e' :   // 쉬움 (녹색)
+    abs < 10 ? '#f59e0b' :   // 보통 (황색)
+    abs < 15 ? '#f97316' :   // 가파름 (주황)
+               '#ef4444';    // 매우 가파름 (적색)
+
+  // ── 고도 범위 (여백 포함) ──
+  const eles = data.map(d => d.ele);
+  const minE = Math.min(...eles), maxE = Math.max(...eles);
+  const span = Math.max(maxE - minE, 20);
+  const loE  = minE - span * 0.08;
+  const hiE  = maxE + span * 0.14;
+
+  // ── SVG 좌표계 ──
+  // W를 컨테이너 실제 너비에서 동적 계산 (padding 16px×2 제외)
+  const W = Math.max((container.clientWidth || 500) - 32, 320);
+  const H = 106;
+  const pad      = { t: 10, r: 10, b: 32, l: 42 };
+  const iW       = W - pad.l - pad.r;
+  const iH       = H - pad.t - pad.b;
+  const stripY   = pad.t + iH + 4;  // 차트 아래 4 px 여백
+  const stripH   = 5;
+
+  const xOf = d => pad.l + (d / totalDist) * iW;
+  const yOf = e => pad.t + (1 - (e - loE) / (hiE - loE)) * iH;
+
+  // ── 채워진 영역 (회색 그라디언트) ──
+  const areaD =
+    `M${xOf(0).toFixed(1)},${(pad.t + iH).toFixed(1)} ` +
+    data.map(d => `L${xOf(d.dist).toFixed(1)},${yOf(d.ele).toFixed(1)}`).join(' ') +
+    ` L${xOf(totalDist).toFixed(1)},${(pad.t + iH).toFixed(1)} Z`;
+
+  // ── 경사도 색상 라인 세그먼트 ──
+  const segs = [];
+  for (let i = 1; i < data.length; i++) {
+    const c = slopeColor(slopes[i - 1].abs);
+    segs.push(
+      `<line x1="${xOf(data[i-1].dist).toFixed(1)}" y1="${yOf(data[i-1].ele).toFixed(1)}"` +
+      ` x2="${xOf(data[i].dist).toFixed(1)}" y2="${yOf(data[i].ele).toFixed(1)}"` +
+      ` stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`
+    );
+  }
+
+  // ── 경사 스트립 바 (차트 아래) ──
+  const strip = [];
+  for (let i = 1; i < data.length; i++) {
+    const x1 = xOf(data[i-1].dist), x2 = xOf(data[i].dist);
+    strip.push(
+      `<rect x="${x1.toFixed(1)}" y="${stripY}" width="${Math.max(x2 - x1, 0.5).toFixed(1)}"` +
+      ` height="${stripH}" fill="${slopeColor(slopes[i-1].abs)}"/>`
+    );
+  }
+
+  // ── 축 레이블 ──
+  const yTks = [minE, Math.round((minE + maxE) / 2), maxE];
+  const xTks = [0, totalDist / 2, totalDist];
+
+  const grid = yTks.map(e =>
+    `<line x1="${pad.l}" y1="${yOf(e).toFixed(1)}" x2="${pad.l + iW}" y2="${yOf(e).toFixed(1)}" stroke="#f0f1f3" stroke-width="1"/>`
+  ).join('');
+  const yLabels = yTks.map(e =>
+    `<text x="${pad.l - 5}" y="${(yOf(e) + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#9ca3af">${Math.round(e)}</text>`
+  ).join('');
+  const xLabels = xTks.map((d, i) =>
+    `<text x="${xOf(d).toFixed(1)}" y="${H - 4}" text-anchor="${i === 0 ? 'start' : i === 1 ? 'middle' : 'end'}" font-size="9" fill="#9ca3af">${distFmt(d)}</text>`
+  ).join('');
+
+  // ── HTML 조립 ──
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+      <span style="font-size:10px;font-weight:600;color:#6b7280;letter-spacing:.3px">⛰ 고도 프로필</span>
+      <span style="display:flex;gap:9px;font-size:9px;color:#6b7280;align-items:center">
+        <span><span style="color:#22c55e">●</span> ~5%</span>
+        <span><span style="color:#f59e0b">●</span> ~10%</span>
+        <span><span style="color:#f97316">●</span> ~15%</span>
+        <span><span style="color:#ef4444">●</span> 15%↑</span>
+      </span>
+    </div>
+    <svg id="elev-svg" width="${W}" height="${H}" style="display:block;max-width:100%"
+         xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="eg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#94a3b8" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#94a3b8" stop-opacity="0.02"/>
+        </linearGradient>
+        <clipPath id="ec"><rect x="${pad.l}" y="${pad.t}"    width="${iW}" height="${iH}"/></clipPath>
+        <clipPath id="sc"><rect x="${pad.l}" y="${stripY}" width="${iW}" height="${stripH}"/></clipPath>
+      </defs>
+
+      ${grid}
+      <path d="${areaD}" fill="url(#eg)" clip-path="url(#ec)"/>
+
+      <!-- 경사도 색상 라인 -->
+      <g clip-path="url(#ec)">${segs.join('')}</g>
+
+      <!-- 경사 스트립 바 -->
+      <g clip-path="url(#sc)">${strip.join('')}</g>
+
+      <text x="${pad.l - 5}" y="${pad.t - 1}" text-anchor="end" font-size="8" fill="#d1d5db">m</text>
+      ${yLabels}
+      ${xLabels}
+
+      <!-- 호버 요소 -->
+      <line   id="eh-line" x1="0" y1="${pad.t}" x2="0" y2="${stripY + stripH}"
+              stroke="#374151" stroke-width="1" stroke-dasharray="3,2" style="display:none"/>
+      <circle id="eh-dot"  r="4.5" fill="#fff" stroke="#374151" stroke-width="2" style="display:none"/>
+
+      <!-- 마우스 이벤트 수신 투명 영역 (차트 + 스트립 전체) -->
+      <rect id="eh-zone" x="${pad.l}" y="${pad.t}"
+            width="${iW}" height="${iH + 4 + stripH}"
+            fill="transparent" style="cursor:crosshair"/>
+    </svg>
+    <div id="elev-tip" style="
+      position:absolute;background:rgba(20,20,20,.84);color:#fff;
+      font-size:10px;font-weight:600;padding:3px 9px;border-radius:7px;
+      pointer-events:none;display:none;white-space:nowrap;top:6px;"></div>`;
+
+  // ── 호버 인터랙션 ──
+  const svg   = document.getElementById('elev-svg');
+  const hLine = document.getElementById('eh-line');
+  const hDot  = document.getElementById('eh-dot');
+  const hTip  = document.getElementById('elev-tip');
+  const zone  = document.getElementById('eh-zone');
+
+  zone.addEventListener('mousemove', e => {
+    // SVG 좌표 정확 변환 — getScreenCTM 방식 (viewBox 스케일 완전 반영)
+    const svgPt = svg.createSVGPoint();
+    svgPt.x = e.clientX;
+    svgPt.y = e.clientY;
+    const { x: svgX } = svgPt.matrixTransform(svg.getScreenCTM().inverse());
+
+    const pct = (svgX - pad.l) / iW;
+    if (pct < 0 || pct > 1) {
+      hLine.style.display = hDot.style.display = hTip.style.display = 'none';
+      if (hoverRouteMarker) { map.removeLayer(hoverRouteMarker); hoverRouteMarker = null; }
+      return;
+    }
+
+    // 가장 가까운 데이터 포인트 탐색
+    const tgt = pct * totalDist;
+    let ci = 0, best = Infinity;
+    for (let i = 0; i < data.length; i++) {
+      const df = Math.abs(data[i].dist - tgt);
+      if (df < best) { best = df; ci = i; }
+    }
+    const pt    = data[ci];
+    const seg   = ci > 0 ? slopes[ci - 1] : { pct: 0, abs: 0 };
+    const color = slopeColor(seg.abs);
+    const arrow = seg.pct >= 0 ? '↑' : '↓';
+
+    const cx = xOf(pt.dist), cy = yOf(pt.ele);
+    hLine.setAttribute('x1', cx.toFixed(1)); hLine.setAttribute('x2', cx.toFixed(1));
+    hLine.style.display = '';
+    hDot.setAttribute('cx', cx.toFixed(1));  hDot.setAttribute('cy', cy.toFixed(1));
+    hDot.setAttribute('stroke', color);
+    hDot.style.display = '';
+
+    hTip.textContent = `${Math.round(pt.ele)} m  ·  ${distFmt(pt.dist)}  ·  경사 ${arrow}${seg.abs.toFixed(1)}%`;
+    hTip.style.display = 'block';
+    // 툴팁은 chart 컨테이너(position:relative) 기준으로 위치 계산
+    const cr   = container.getBoundingClientRect();
+    const relX = e.clientX - cr.left;
+    hTip.style.left      = relX + 'px';
+    hTip.style.transform = pct > 0.65 ? 'translateX(-100%)' : pct < 0.3 ? 'translateX(4px)' : 'translateX(-50%)';
+
+    // ── 지도 위 이동 마커 ──
+    const rp = routePoints[pt.origIdx];
+    if (rp) {
+      const ll = L.latLng(rp.lat, rp.lng);
+      if (!hoverRouteMarker) {
+        hoverRouteMarker = L.circleMarker(ll, {
+          radius: 8, fillColor: color, color: '#fff',
+          weight: 3, fillOpacity: 1, interactive: false,
+        }).addTo(map);
+      } else {
+        hoverRouteMarker.setLatLng(ll);
+        hoverRouteMarker.setStyle({ fillColor: color });
+      }
+    }
+  });
+
+  zone.addEventListener('mouseleave', () => {
+    hLine.style.display = hDot.style.display = hTip.style.display = 'none';
+    if (hoverRouteMarker) { map.removeLayer(hoverRouteMarker); hoverRouteMarker = null; }
+  });
+}
+
+// ──────────────────────────────────────────
+// 지도 드래그 앤 드롭 GPX 로드
+// ──────────────────────────────────────────
+(function initGpxDrop() {
+  const wrap = document.getElementById('map-wrap');
+  let dragCount = 0; // dragenter/dragleave가 자식 요소에서도 발생하므로 카운터로 관리
+
+  wrap.addEventListener('dragenter', e => {
+    if ([...e.dataTransfer.types].includes('Files')) {
+      dragCount++;
+      wrap.classList.add('drag-over');
+    }
+  });
+  wrap.addEventListener('dragleave', () => {
+    if (--dragCount <= 0) { dragCount = 0; wrap.classList.remove('drag-over'); }
+  });
+  wrap.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  wrap.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCount = 0;
+    wrap.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.gpx') && file.type !== 'application/gpx+xml') {
+      showError('GPX 파일(.gpx)만 지원합니다.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload  = ev => {
+      try { parseAndDisplayGpx(ev.target.result, file.name); }
+      catch (err) { showError('GPX 파일을 읽을 수 없습니다: ' + err.message); }
+    };
+    reader.onerror = () => showError('파일 읽기에 실패했습니다.');
+    reader.readAsText(file, 'UTF-8');
+  });
+})();
+
+// ──────────────────────────────────────────
+// 전역 키보드 단축키
+// ──────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (pickMode)  { clearPickMode(); }          // 지도 클릭 선택 모드 취소
+    if (ctxMenu)   { closeContextMenu(); }        // 컨텍스트 메뉴 닫기
+  }
+});
+
+// ──────────────────────────────────────────
+// 시작
+// ──────────────────────────────────────────
+initMap();
+</script>
+</body>
+</html>
