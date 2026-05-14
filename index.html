@@ -502,7 +502,7 @@
 
     <!-- 경로 정보 바 -->
     <div id="route-info-bar">
-      <button id="rib-close" title="닫기" onclick="document.getElementById('route-overlay').style.display='none'">✕</button>
+      <button id="rib-close" title="닫기" onclick="$el['route-overlay'].style.display='none'">✕</button>
     <div class="rib-item">
       <span class="rib-icon">📏</span>
       <div class="rib-texts">
@@ -573,11 +573,14 @@ let routePoints     = [];
 let selectedProfile = 'foot-hiking';
 
 // 경유지
-let wpIds    = [];
+let wpIds     = [];
 let wpMarkers = {};
 let wpCounter = 0;
 
 const ORS_BASE = 'https://api.openrouteservice.org/v2/directions';
+
+// ── 캐시된 DOM 요소 (initMap 에서 일괄 설정) ──
+const $el = {};
 
 // ──────────────────────────────────────────
 // 공용 유틸 함수
@@ -616,25 +619,36 @@ function calcDifficulty(ascent, dist) {
 
 /** 경로 정보 바 일괄 업데이트 */
 function updateInfoBar({ dist, durText, ascent, descent }) {
-  document.getElementById('rib-distance').textContent = distFmt(dist);
-  document.getElementById('rib-duration').textContent = durText;
-  document.getElementById('rib-ascent').textContent   = '+' + Math.round(ascent) + ' m';
-  document.getElementById('rib-descent').textContent  = '-' + Math.round(descent) + ' m';
+  $el['rib-distance'].textContent = distFmt(dist);
+  $el['rib-duration'].textContent = durText;
+  $el['rib-ascent'].textContent   = '+' + Math.round(ascent) + ' m';
+  $el['rib-descent'].textContent  = '-' + Math.round(descent) + ' m';
   const { cls, text } = calcDifficulty(ascent, dist);
-  const diffEl = document.getElementById('rib-diff');
-  diffEl.textContent = text;
-  diffEl.className   = 'rib-val diff-pill ' + cls;
+  $el['rib-diff'].textContent = text;
+  $el['rib-diff'].className   = 'rib-val diff-pill ' + cls;
 }
 
-// API 키 복원
-document.getElementById('api-key-input').value = localStorage.getItem('ors_api_key') || '';
-function getApiKey() { return document.getElementById('api-key-input').value.trim(); }
+function getApiKey() { return $el['api-key-input'].value.trim(); }
 function saveApiKey() { localStorage.setItem('ors_api_key', getApiKey()); onCoordInput(); }
 
 // ──────────────────────────────────────────
 // 지도 초기화
 // ──────────────────────────────────────────
 function initMap() {
+  // ── DOM 요소 일괄 캐싱 ──
+  [
+    'find-btn','find-label','find-spinner','gpx-btn','reset-btn',
+    'route-overlay','elev-chart','error-box','api-key-input',
+    'start-lat','start-lng','goal-lat','goal-lng',
+    'search-results','mountain-search','search-go-btn',
+    'rib-distance','rib-duration','rib-ascent','rib-descent',
+    'rib-diff','rib-avg-slope','rib-max-slope',
+    'waypoints-list','map-hint','btn-set-start','btn-set-end',
+  ].forEach(id => { $el[id] = document.getElementById(id); });
+
+  // API 키 복원
+  $el['api-key-input'].value = localStorage.getItem('ors_api_key') || '';
+
   map = L.map('map').setView([37.5665, 126.9780], 12);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -698,12 +712,12 @@ function closeContextMenu() {
 // ──────────────────────────────────────────
 function applyPickedCoord(type, latlng) {
   if (type === 'start') {
-    document.getElementById('start-lat').value = latlng.lat.toFixed(6);
-    document.getElementById('start-lng').value = latlng.lng.toFixed(6);
+    $el['start-lat'].value = latlng.lat.toFixed(6);
+    $el['start-lng'].value = latlng.lng.toFixed(6);
     placeEndpointMarker('start', latlng);
   } else if (type === 'end') {
-    document.getElementById('goal-lat').value = latlng.lat.toFixed(6);
-    document.getElementById('goal-lng').value = latlng.lng.toFixed(6);
+    $el['goal-lat'].value = latlng.lat.toFixed(6);
+    $el['goal-lng'].value = latlng.lng.toFixed(6);
     placeEndpointMarker('end', latlng);
   } else if (type.startsWith('wp-')) {
     applyWaypointCoord(parseInt(type.slice(3)), latlng);
@@ -760,7 +774,7 @@ function addWaypoint(latlng = null) {
       </label>
     </div>`;
 
-  document.getElementById('waypoints-list').appendChild(card);
+  $el['waypoints-list'].appendChild(card);
   refreshWaypointUI();
   if (latlng) applyWaypointCoord(id, latlng); // 내부에서 onCoordInput 호출
   else onCoordInput();
@@ -779,7 +793,7 @@ function moveWaypoint(id, dir) {
   const nIdx = idx + dir;
   if (nIdx < 0 || nIdx >= wpIds.length) return;
   [wpIds[idx], wpIds[nIdx]] = [wpIds[nIdx], wpIds[idx]];
-  const list = document.getElementById('waypoints-list');
+  const list = $el['waypoints-list'];
   wpIds.map(i => document.getElementById(`wp-card-${i}`)).forEach(c => list.appendChild(c));
   refreshWaypointUI();
 }
@@ -823,20 +837,20 @@ function startPickMode(type) {
   else if (type === 'end')        hint = '🔴 지도를 클릭해 도착지 선택';
   else { const n = wpIds.indexOf(parseInt(type.slice(3)))+1; hint = `🟡 경유지 ${n} 위치 선택`; }
   showHint(hint);
-  document.getElementById('btn-set-start').classList.toggle('active', type === 'start');
-  document.getElementById('btn-set-end').classList.toggle('active',   type === 'end');
+  $el['btn-set-start'].classList.toggle('active', type === 'start');
+  $el['btn-set-end'].classList.toggle('active',   type === 'end');
   map.getContainer().style.cursor = 'crosshair';
 }
 function clearPickMode() {
   pickMode = null;
-  document.getElementById('btn-set-start').classList.remove('active');
-  document.getElementById('btn-set-end').classList.remove('active');
+  $el['btn-set-start'].classList.remove('active');
+  $el['btn-set-end'].classList.remove('active');
   map.getContainer().style.cursor = '';
   setTimeout(hideHint, 800);
 }
-function showHint(msg) { const h=document.getElementById('map-hint'); h.textContent=msg; h.classList.add('show'); }
-function hideHint()     { document.getElementById('map-hint').classList.remove('show'); }
-function showResetBtn() { document.getElementById('reset-btn').style.display = 'block'; }
+function showHint(msg) { $el['map-hint'].textContent = msg; $el['map-hint'].classList.add('show'); }
+function hideHint()     { $el['map-hint'].classList.remove('show'); }
+function showResetBtn() { $el['reset-btn'].style.display = 'block'; }
 
 // ──────────────────────────────────────────
 // 프로필
@@ -852,15 +866,14 @@ function selectProfile(btn) {
 // ──────────────────────────────────────────
 function onCoordInput() {
   const hasEndpoints =
-    document.getElementById('start-lat').value &&
-    document.getElementById('start-lng').value &&
-    document.getElementById('goal-lat').value  &&
-    document.getElementById('goal-lng').value;
-  const wpOk = wpIds.every(id =>
-    (document.getElementById(`wp-lat-${id}`).value && document.getElementById(`wp-lng-${id}`).value) ||
-    (!document.getElementById(`wp-lat-${id}`).value && !document.getElementById(`wp-lng-${id}`).value)
-  );
-  document.getElementById('find-btn').disabled = !(hasEndpoints && wpOk && getApiKey());
+    $el['start-lat'].value && $el['start-lng'].value &&
+    $el['goal-lat'].value  && $el['goal-lng'].value;
+  const wpOk = wpIds.every(id => {
+    const lat = document.getElementById(`wp-lat-${id}`).value;
+    const lng = document.getElementById(`wp-lng-${id}`).value;
+    return !!lat === !!lng; // 둘 다 입력됐거나 둘 다 비어 있으면 유효
+  });
+  $el['find-btn'].disabled = !(hasEndpoints && wpOk && getApiKey());
 }
 
 // ──────────────────────────────────────────
@@ -869,14 +882,14 @@ function onCoordInput() {
 async function findRoute() {
   hideError(); setLoading(true);
   routePoints = [];
-  document.getElementById('gpx-btn').disabled = true;
-  document.getElementById('route-overlay').style.display = 'none';
+  $el['gpx-btn'].disabled = true;
+  $el['route-overlay'].style.display = 'none';
 
   const apiKey   = getApiKey();
-  const startLat = parseFloat(document.getElementById('start-lat').value);
-  const startLng = parseFloat(document.getElementById('start-lng').value);
-  const goalLat  = parseFloat(document.getElementById('goal-lat').value);
-  const goalLng  = parseFloat(document.getElementById('goal-lng').value);
+  const startLat = parseFloat($el['start-lat'].value);
+  const startLng = parseFloat($el['start-lng'].value);
+  const goalLat  = parseFloat($el['goal-lat'].value);
+  const goalLng  = parseFloat($el['goal-lng'].value);
 
   const coords = [[startLng, startLat]];
   for (const id of wpIds) {
@@ -932,15 +945,15 @@ function drawRoute(geojson) {
   // 통계
   const props   = feature.properties ?? {};
   const summary = props.summary ?? {};
-  const dist    = summary.distance ?? 0;
-  const dur     = summary.duration ?? 0;
-  const ascent  = props.ascent  ?? 0;
-  const descent = props.descent ?? 0;
+  updateInfoBar({
+    dist:    summary.distance ?? 0,
+    durText: durFmt(summary.duration ?? 0),
+    ascent:  props.ascent  ?? 0,
+    descent: props.descent ?? 0,
+  });
 
-  updateInfoBar({ dist, durText: durFmt(dur), ascent, descent });
-
-  document.getElementById('route-overlay').style.display = 'flex';
-  document.getElementById('gpx-btn').disabled = false;
+  $el['route-overlay'].style.display = 'flex';
+  $el['gpx-btn'].disabled = false;
   drawElevChart(routePoints);
   showResetBtn();
 }
@@ -1002,7 +1015,7 @@ ${trkpts}
 function resetAll() {
   // 진행 중인 산 검색 요청 취소
   if (_searchAbortCtrl) { _searchAbortCtrl.abort(); _searchAbortCtrl = null; }
-  ['start-lat','start-lng','goal-lat','goal-lng'].forEach(id => document.getElementById(id).value = '');
+  ['start-lat','start-lng','goal-lat','goal-lng'].forEach(id => { $el[id].value = ''; });
   if (startMarker)      { map.removeLayer(startMarker);      startMarker      = null; }
   if (endMarker)        { map.removeLayer(endMarker);        endMarker        = null; }
   if (routeLayer)       { map.removeLayer(routeLayer);       routeLayer       = null; }
@@ -1010,18 +1023,18 @@ function resetAll() {
   if (hoverRouteMarker) { map.removeLayer(hoverRouteMarker); hoverRouteMarker = null; }
   [...wpIds].forEach(id => removeWaypoint(id));
   routePoints = [];
-  document.getElementById('route-overlay').style.display = 'none';
-  document.getElementById('elev-chart').innerHTML = '';
+  $el['route-overlay'].style.display = 'none';
+  $el['elev-chart'].innerHTML = '';
   ['rib-distance','rib-duration','rib-ascent','rib-descent','rib-avg-slope','rib-max-slope'].forEach(
-    id => { const el = document.getElementById(id); if (el) el.textContent = '-'; }
+    id => { $el[id].textContent = '-'; }
   );
-  document.getElementById('rib-diff').textContent = '-';
-  document.getElementById('rib-diff').className   = 'rib-val';
-  document.getElementById('gpx-btn').disabled  = true;
-  document.getElementById('find-btn').disabled  = true;
-  document.getElementById('reset-btn').style.display  = 'none';
-  document.getElementById('search-results').innerHTML = '';
-  document.getElementById('mountain-search').value    = '';
+  $el['rib-diff'].textContent = '-';
+  $el['rib-diff'].className   = 'rib-val';
+  $el['gpx-btn'].disabled          = true;
+  $el['find-btn'].disabled         = true;
+  $el['reset-btn'].style.display   = 'none';
+  $el['search-results'].innerHTML  = '';
+  $el['mountain-search'].value     = '';
   hideError();
   map.setView([37.5665, 126.9780], 12);
 }
@@ -1106,8 +1119,8 @@ function parseAndDisplayGpx(xmlStr, fileName) {
   updateInfoBar({ dist, durText, ascent, descent });
 
   // ── 오버레이 표시 및 고도 차트 그리기 ──
-  document.getElementById('route-overlay').style.display = 'flex';
-  document.getElementById('gpx-btn').disabled = false;
+  $el['route-overlay'].style.display = 'flex';
+  $el['gpx-btn'].disabled = false;
   drawElevChart(routePoints);
   showResetBtn();
   hideError();
@@ -1120,7 +1133,7 @@ function parseAndDisplayGpx(xmlStr, fileName) {
 let _searchAbortCtrl = null;
 
 async function searchMountain() {
-  const q = document.getElementById('mountain-search').value.trim();
+  const q = $el['mountain-search'].value.trim();
   if (!q) return;
 
   // 이전 요청이 아직 진행 중이면 취소
@@ -1131,8 +1144,8 @@ async function searchMountain() {
   // 8초 타임아웃
   const timeoutId = setTimeout(() => _searchAbortCtrl.abort(), 8000);
 
-  const container = document.getElementById('search-results');
-  const goBtn     = document.getElementById('search-go-btn');
+  const container = $el['search-results'];
+  const goBtn     = $el['search-go-btn'];
   container.innerHTML = '<div class="search-loading">검색 중</div>';
   goBtn.disabled = true;
 
@@ -1145,7 +1158,6 @@ async function searchMountain() {
       headers: { 'User-Agent': 'GPX-Route-Helper/1.0 (bepro001@gmail.com)' },
       signal,
     });
-    clearTimeout(timeoutId);
     if (!resp.ok) throw new Error(`서버 오류 (${resp.status})`);
     renderSearchResults(await resp.json());
   } catch (e) {
@@ -1157,13 +1169,13 @@ async function searchMountain() {
     container.innerHTML = '';
     container.appendChild(errDiv);
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId); // 성공·실패 모두 타임아웃 해제
     goBtn.disabled = false;
   }
 }
 
 function renderSearchResults(results) {
-  const container = document.getElementById('search-results');
+  const container = $el['search-results'];
   container.innerHTML = '';
 
   if (!results.length) {
@@ -1175,7 +1187,7 @@ function renderSearchResults(results) {
   }
 
   // 검색어·정규식을 루프 밖에서 한 번만 생성
-  const q  = document.getElementById('mountain-search').value.trim();
+  const q  = $el['mountain-search'].value.trim();
   const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
 
   const sorted = [...results].sort((a, b) => {
@@ -1255,12 +1267,12 @@ function viewSearchResult(lat, lng, name) {
 function setFromSearch(type, lat, lng, name) {
   const latlng = L.latLng(lat, lng);
   if (type === 'start') {
-    document.getElementById('start-lat').value = lat.toFixed(6);
-    document.getElementById('start-lng').value = lng.toFixed(6);
+    $el['start-lat'].value = lat.toFixed(6);
+    $el['start-lng'].value = lng.toFixed(6);
     placeEndpointMarker('start', latlng);
   } else if (type === 'end') {
-    document.getElementById('goal-lat').value = lat.toFixed(6);
-    document.getElementById('goal-lng').value = lng.toFixed(6);
+    $el['goal-lat'].value = lat.toFixed(6);
+    $el['goal-lng'].value = lng.toFixed(6);
     placeEndpointMarker('end', latlng);
   } else {
     addWaypoint(latlng);
@@ -1283,26 +1295,25 @@ function makeCircleIcon(color, text, fontSize) {
   });
 }
 function setLoading(on) {
-  document.getElementById('find-label').style.display   = on ? 'none' : 'flex';
-  document.getElementById('find-spinner').style.display = on ? 'block': 'none';
+  $el['find-label'].style.display   = on ? 'none' : 'flex';
+  $el['find-spinner'].style.display = on ? 'block' : 'none';
   if (on) {
-    document.getElementById('find-btn').disabled = true;
+    $el['find-btn'].disabled = true;
   } else {
     onCoordInput(); // 좌표·API 키 상태를 다시 검사해 버튼 활성화 여부 결정
   }
 }
 function showError(msg) {
-  const b = document.getElementById('error-box');
-  b.textContent = '⚠️ ' + msg; // innerHTML 대신 textContent — XSS 방지
-  b.style.display = 'block';
+  $el['error-box'].textContent = '⚠️ ' + msg; // innerHTML 대신 textContent — XSS 방지
+  $el['error-box'].style.display = 'block';
 }
-function hideError() { document.getElementById('error-box').style.display = 'none'; }
+function hideError() { $el['error-box'].style.display = 'none'; }
 
 // ──────────────────────────────────────────
 // 고도 프로필 차트
 // ──────────────────────────────────────────
 function drawElevChart(points) {
-  const container = document.getElementById('elev-chart');
+  const container = $el['elev-chart'];
   if (!points || points.length < 2) { container.innerHTML = ''; return; }
 
   // ── 호버 마커 초기화 (재렌더링 시 이전 마커 제거) ──
@@ -1334,26 +1345,6 @@ function drawElevChart(points) {
     ? smoothed.filter((_, i) => i % step === 0 || i === smoothed.length - 1)
     : smoothed;
 
-  // ── 구간별 경사도 계산 ──
-  // slopes[i] = i번째 세그먼트(data[i-1]→data[i])의 경사도 정보
-  const slopes = [];
-  let wSum = 0, wTot = 0, maxSlope = 0;
-  for (let i = 1; i < data.length; i++) {
-    const hDist   = Math.max(data[i].dist - data[i - 1].dist, 0.1); // 수평 거리 (0 방지)
-    const eleDiff = data[i].ele - data[i - 1].ele;                   // 고도 차 (부호 있음)
-    const pct     = eleDiff / hDist * 100;                           // 경사도 (%)
-    const absPct  = Math.abs(pct);
-    slopes.push({ pct, abs: absPct });
-    wSum += absPct * hDist;
-    wTot += hDist;
-    if (hDist > 30 && absPct > maxSlope) maxSlope = absPct; // 30 m 이상 구간만 후보 (SRTM 격자 해상도 기준)
-  }
-  const avgSlope = wTot > 0 ? wSum / wTot : 0;
-
-  // 정보 바 업데이트
-  document.getElementById('rib-avg-slope').textContent = avgSlope.toFixed(1) + '%';
-  document.getElementById('rib-max-slope').textContent = maxSlope.toFixed(1) + '%';
-
   // ── 경사도 → 색상 ──
   const slopeColor = abs =>
     abs < 5  ? '#22c55e' :   // 쉬움 (녹색)
@@ -1372,11 +1363,11 @@ function drawElevChart(points) {
   // W를 컨테이너 실제 너비에서 동적 계산 (padding 16px×2 제외)
   const W = Math.max((container.clientWidth || 500) - 32, 320);
   const H = 106;
-  const pad      = { t: 10, r: 10, b: 32, l: 42 };
-  const iW       = W - pad.l - pad.r;
-  const iH       = H - pad.t - pad.b;
-  const stripY   = pad.t + iH + 4;  // 차트 아래 4 px 여백
-  const stripH   = 5;
+  const pad    = { t: 10, r: 10, b: 32, l: 42 };
+  const iW     = W - pad.l - pad.r;
+  const iH     = H - pad.t - pad.b;
+  const stripY = pad.t + iH + 4;  // 차트 아래 4 px 여백
+  const stripH = 5;
 
   const xOf = d => pad.l + (d / totalDist) * iW;
   const yOf = e => pad.t + (1 - (e - loE) / (hiE - loE)) * iH;
@@ -1387,26 +1378,39 @@ function drawElevChart(points) {
     data.map(d => `L${xOf(d.dist).toFixed(1)},${yOf(d.ele).toFixed(1)}`).join(' ') +
     ` L${xOf(totalDist).toFixed(1)},${(pad.t + iH).toFixed(1)} Z`;
 
-  // ── 경사도 색상 라인 세그먼트 ──
-  const segs = [];
+  // ── 구간별 경사도 계산 + 색상 라인 + 스트립 바 (단일 루프로 통합) ──
+  // slopes[i] = i번째 세그먼트(data[i-1]→data[i])의 경사도 정보
+  const slopes = [], segs = [], strip = [];
+  let wSum = 0, wTot = 0, maxSlope = 0;
   for (let i = 1; i < data.length; i++) {
-    const c = slopeColor(slopes[i - 1].abs);
+    const hDist   = Math.max(data[i].dist - data[i-1].dist, 0.1); // 수평 거리 (0 방지)
+    const eleDiff = data[i].ele - data[i-1].ele;                   // 고도 차 (부호 있음)
+    const pct     = eleDiff / hDist * 100;                         // 경사도 (%)
+    const absPct  = Math.abs(pct);
+    slopes.push({ pct, abs: absPct });
+    wSum += absPct * hDist;
+    wTot += hDist;
+    if (hDist > 30 && absPct > maxSlope) maxSlope = absPct; // 30 m 이상 구간만 후보
+
+    const c   = slopeColor(absPct);
+    const x1f = xOf(data[i-1].dist), y1f = yOf(data[i-1].ele);
+    const x2f = xOf(data[i].dist),   y2f = yOf(data[i].ele);
     segs.push(
-      `<line x1="${xOf(data[i-1].dist).toFixed(1)}" y1="${yOf(data[i-1].ele).toFixed(1)}"` +
-      ` x2="${xOf(data[i].dist).toFixed(1)}" y2="${yOf(data[i].ele).toFixed(1)}"` +
+      `<line x1="${x1f.toFixed(1)}" y1="${y1f.toFixed(1)}"` +
+      ` x2="${x2f.toFixed(1)}" y2="${y2f.toFixed(1)}"` +
       ` stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`
     );
-  }
-
-  // ── 경사 스트립 바 (차트 아래) ──
-  const strip = [];
-  for (let i = 1; i < data.length; i++) {
-    const x1 = xOf(data[i-1].dist), x2 = xOf(data[i].dist);
     strip.push(
-      `<rect x="${x1.toFixed(1)}" y="${stripY}" width="${Math.max(x2 - x1, 0.5).toFixed(1)}"` +
-      ` height="${stripH}" fill="${slopeColor(slopes[i-1].abs)}"/>`
+      `<rect x="${x1f.toFixed(1)}" y="${stripY}"` +
+      ` width="${Math.max(x2f - x1f, 0.5).toFixed(1)}"` +
+      ` height="${stripH}" fill="${c}"/>`
     );
   }
+  const avgSlope = wTot > 0 ? wSum / wTot : 0;
+
+  // 정보 바 업데이트
+  $el['rib-avg-slope'].textContent = avgSlope.toFixed(1) + '%';
+  $el['rib-max-slope'].textContent = maxSlope.toFixed(1) + '%';
 
   // ── 축 레이블 ──
   const yTks = [minE, Math.round((minE + maxE) / 2), maxE];
@@ -1546,6 +1550,7 @@ function drawElevChart(points) {
 // 지도 드래그 앤 드롭 GPX 로드
 // ──────────────────────────────────────────
 (function initGpxDrop() {
+  // IIFE: initMap() 호출 전에 실행되므로 $el 캐시 대신 직접 참조
   const wrap = document.getElementById('map-wrap');
   let dragCount = 0; // dragenter/dragleave가 자식 요소에서도 발생하므로 카운터로 관리
 
