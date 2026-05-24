@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<html lang="ko"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🗺️ GPX 경로 만들기 도우미</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
@@ -33,8 +32,25 @@
       z-index: 10;
     }
 
-    .app-header h1 { font-size: 15px; font-weight: 700; color: #1a1a2e; }
-    .app-header p  { font-size: 11px; color: #999; margin-top: 2px; }
+    .app-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+    .app-header-text h1 { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+    .app-header-text p  { font-size: 11px; color: #999; margin-top: 2px; }
+    #copy-source-btn {
+      flex-shrink: 0; margin-top: 2px;
+      background: none; border: 1px solid #e8eaed; border-radius: 7px;
+      padding: 4px 7px; cursor: pointer; font-size: 14px; line-height: 1;
+      color: #888; transition: all .15s;
+      position: relative;
+    }
+    #copy-source-btn:hover { background: #f0f7ff; border-color: #93c5fd; color: #2563eb; }
+    #copy-source-btn.copied { background: #f0fdf4; border-color: #86efac; color: #16a34a; }
+    #copy-source-btn .copy-tooltip {
+      display: none; position: absolute; top: calc(100% + 6px); right: 0;
+      background: rgba(20,20,20,.82); color: #fff;
+      font-size: 10px; white-space: nowrap; padding: 3px 8px;
+      border-radius: 6px; pointer-events: none;
+    }
+    #copy-source-btn.copied .copy-tooltip { display: block; }
 
     /* ── API 키 ── */
     .api-section {
@@ -243,6 +259,34 @@
     .btn-success { background: linear-gradient(135deg,#22c55e,#16a34a); color:#fff; }
     .btn-outline { background: transparent; border: 1px solid #dde1e7; color: #555; font-size: 12px; }
 
+    /* GPX 파일명 모달 */
+    #gpx-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 9999;
+      align-items: center; justify-content: center;
+    }
+    #gpx-modal-overlay.open { display: flex; }
+    #gpx-modal {
+      background: #fff; border-radius: 14px; padding: 28px 24px 20px;
+      width: 340px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,.22);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    #gpx-modal h3 { margin: 0; font-size: 15px; color: #1a1a1a; }
+    #gpx-modal-input {
+      width: 100%; box-sizing: border-box;
+      padding: 10px 12px; font-size: 14px;
+      border: 1.5px solid #d1d5db; border-radius: 8px; outline: none;
+      transition: border-color .15s;
+    }
+    #gpx-modal-input:focus { border-color: #22c55e; }
+    #gpx-modal-hint { font-size: 11px; color: #888; margin-top: -8px; }
+    #gpx-modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+    #gpx-modal-btns button { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    #gpx-modal-cancel { background: #f1f5f9; color: #555; }
+    #gpx-modal-cancel:hover { background: #e2e8f0; }
+    #gpx-modal-confirm { background: linear-gradient(135deg,#22c55e,#16a34a); color: #fff; }
+    #gpx-modal-confirm:hover { opacity: .9; }
+
     /* 에러 */
     #error-box {
       display: none;
@@ -381,14 +425,20 @@
 <div id="sidebar">
 
   <div class="app-header">
-    <h1>🗺️ GPX 경로 만들기 도우미 <span style="font-size:10px;font-weight:400;color:#bbb;">(저작권: 이강헌)</span></h1>
-    <p>OpenStreetMap · OpenRouteService · 완전 무료</p>
+    <div class="app-header-text">
+      <h1>🗺️ GPX 경로 만들기 도우미 <span style="font-size:10px;font-weight:400;color:#bbb;">(저작권: 이강헌)</span></h1>
+      <p>OpenStreetMap · OpenRouteService · 완전 무료</p>
+    </div>
+    <button id="copy-source-btn" title="index.html 소스 복사" onclick="copySourceCode()">
+      📋
+      <span class="copy-tooltip">복사됨!</span>
+    </button>
   </div>
 
   <!-- API 키 -->
   <div class="api-section">
     <label>🔑 OpenRouteService API 키</label>
-    <input type="text" id="api-key-input" placeholder="API 키를 붙여넣으세요" autocomplete="off" spellcheck="false" oninput="saveApiKey()" />
+    <input type="text" id="api-key-input" placeholder="API 키를 붙여넣으세요" autocomplete="off" spellcheck="false" oninput="saveApiKey()">
     <small>
       무료 발급: <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener noreferrer">openrouteservice.org</a> 가입 →<br>
       대시보드 → Tokens → <strong>Create Token</strong> (2,000회/일 무료)
@@ -399,9 +449,7 @@
   <div class="search-section">
     <div class="search-label">🔍 산 · 지역 검색</div>
     <div class="search-row">
-      <input type="text" id="mountain-search"
-             placeholder="산 이름 입력 (예: 북한산, 한라산)"
-             onkeydown="if(event.key==='Enter') searchMountain()" />
+      <input type="text" id="mountain-search" placeholder="산 이름 입력 (예: 북한산, 한라산)" onkeydown="if(event.key==='Enter') searchMountain()">
       <button class="search-go-btn" id="search-go-btn" onclick="searchMountain()">검색</button>
     </div>
     <div id="search-results"></div>
@@ -455,9 +503,9 @@
   <div class="card">
     <div class="card-title">경로 유형</div>
     <div class="profile-row">
-      <button class="profile-btn selected" data-profile="foot-hiking"     onclick="selectProfile(this)">🥾 등산</button>
-      <button class="profile-btn"          data-profile="foot-walking"    onclick="selectProfile(this)">🚶 도보</button>
-      <button class="profile-btn"          data-profile="cycling-regular" onclick="selectProfile(this)">🚴 자전거</button>
+      <button class="profile-btn selected" data-profile="foot-hiking" onclick="selectProfile(this)">🥾 등산</button>
+      <button class="profile-btn" data-profile="foot-walking" onclick="selectProfile(this)">🚶 도보</button>
+      <button class="profile-btn" data-profile="cycling-regular" onclick="selectProfile(this)">🚴 자전거</button>
     </div>
   </div>
 
@@ -465,13 +513,13 @@
   <div id="error-box"></div>
 
   <!-- 경로 찾기 -->
-  <button class="btn btn-primary" id="find-btn" onclick="findRoute()" disabled>
+  <button class="btn btn-primary" id="find-btn" onclick="findRoute()" disabled="">
     <span id="find-label">🔍 경로 찾기</span>
     <span class="spinner" id="find-spinner"></span>
   </button>
 
   <!-- GPX 다운로드 -->
-  <button class="btn btn-success" id="gpx-btn" onclick="downloadGpx()" disabled>
+  <button class="btn btn-success" id="gpx-btn" onclick="openGpxModal()" disabled="">
     💾 GPX 파일 다운로드
   </button>
 
@@ -482,7 +530,7 @@
 
 <!-- ════════════════ 지도 영역 ════════════════ -->
 <div id="map-wrap">
-  <div id="map"></div>
+  <div id="map" class="leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="position: relative;"><div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 19; transform: translate3d(0px, 0px, 0px) scale(1);"><img alt="" src="https://b.tile.openstreetmap.org/12/3492/1585.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(394px, 87px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3492/1586.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(394px, 343px, 0px); opacity: 1;"><img alt="" src="https://a.tile.openstreetmap.org/12/3491/1585.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(138px, 87px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3493/1585.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(650px, 87px, 0px); opacity: 1;"><img alt="" src="https://b.tile.openstreetmap.org/12/3491/1586.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(138px, 343px, 0px); opacity: 1;"><img alt="" src="https://a.tile.openstreetmap.org/12/3493/1586.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(650px, 343px, 0px); opacity: 1;"><img alt="" src="https://a.tile.openstreetmap.org/12/3492/1584.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(394px, -169px, 0px); opacity: 1;"><img alt="" src="https://a.tile.openstreetmap.org/12/3492/1587.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(394px, 599px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3491/1584.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(138px, -169px, 0px); opacity: 1;"><img alt="" src="https://b.tile.openstreetmap.org/12/3493/1584.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(650px, -169px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3491/1587.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(138px, 599px, 0px); opacity: 1;"><img alt="" src="https://b.tile.openstreetmap.org/12/3493/1587.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(650px, 599px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3490/1585.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-118px, 87px, 0px); opacity: 1;"><img alt="" src="https://a.tile.openstreetmap.org/12/3494/1585.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(906px, 87px, 0px); opacity: 1;"><img alt="" src="https://a.tile.openstreetmap.org/12/3490/1586.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-118px, 343px, 0px); opacity: 1;"><img alt="" src="https://b.tile.openstreetmap.org/12/3494/1586.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(906px, 343px, 0px); opacity: 1;"><img alt="" src="https://b.tile.openstreetmap.org/12/3490/1584.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-118px, -169px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3494/1584.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(906px, -169px, 0px); opacity: 1;"><img alt="" src="https://b.tile.openstreetmap.org/12/3490/1587.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-118px, 599px, 0px); opacity: 1;"><img alt="" src="https://c.tile.openstreetmap.org/12/3494/1587.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(906px, 599px, 0px); opacity: 1;"></div></div></div><div class="leaflet-pane leaflet-overlay-pane"></div><div class="leaflet-pane leaflet-shadow-pane"></div><div class="leaflet-pane leaflet-marker-pane"></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(894138px, 406063px, 0px) scale(2048);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in" aria-disabled="false"><span aria-hidden="true">+</span></a><a class="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out" aria-disabled="false"><span aria-hidden="true">−</span></a></div></div><div class="leaflet-top leaflet-right"></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com" title="A JavaScript library for interactive maps"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" class="leaflet-attribution-flag"><path fill="#4C7BE1" d="M0 0h12v4H0z"></path><path fill="#FFD500" d="M0 4h12v3H0z"></path><path fill="#E0BC00" d="M0 7h12v1H0z"></path></svg> Leaflet</a> <span aria-hidden="true">|</span> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</div></div></div></div>
 
   <!-- 지도 위 힌트 -->
   <div id="map-hint"></div>
@@ -579,6 +627,16 @@ let wpCounter = 0;
 
 const ORS_BASE = 'https://api.openrouteservice.org/v2/directions';
 
+/** 경로 유형 레이블 (단일 정의 — openGpxModal·downloadGpx 공용) */
+const PROFILE_LABELS = {
+  'foot-hiking':     '등산경로',
+  'foot-walking':    '도보경로',
+  'cycling-regular': '자전거경로',
+};
+
+/** 로컬 날짜 YYYY-MM-DD (UTC 아님 — 한국 자정 이후 하루 어긋남 방지) */
+const localDateStr = () => new Date().toLocaleDateString('sv'); // 'sv' 로케일 = ISO 형식
+
 // ── 캐시된 DOM 요소 (initMap 에서 일괄 설정) ──
 const $el = {};
 
@@ -632,6 +690,37 @@ function getApiKey() { return $el['api-key-input'].value.trim(); }
 function saveApiKey() { localStorage.setItem('ors_api_key', getApiKey()); onCoordInput(); }
 
 // ──────────────────────────────────────────
+// 소스 코드 클립보드 복사
+// ──────────────────────────────────────────
+async function copySourceCode() {
+  const btn = document.getElementById('copy-source-btn');
+  // API 키가 outerHTML에 포함되지 않도록 캡처 전 임시 제거 후 복원
+  const apiInput = $el['api-key-input'];
+  const savedKey = apiInput.value;
+  apiInput.value = '';
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  apiInput.value = savedKey;
+
+  try {
+    await navigator.clipboard.writeText(html);
+    btn.classList.add('copied');
+    setTimeout(() => btn.classList.remove('copied'), 2000);
+  } catch {
+    // Clipboard API 실패 시 execCommand 폴백
+    const ta = Object.assign(document.createElement('textarea'), {
+      value: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
+      style: 'position:fixed;opacity:0',
+    });
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.classList.add('copied');
+    setTimeout(() => btn.classList.remove('copied'), 2000);
+  }
+}
+
+// ──────────────────────────────────────────
 // 지도 초기화
 // ──────────────────────────────────────────
 function initMap() {
@@ -644,6 +733,7 @@ function initMap() {
     'rib-distance','rib-duration','rib-ascent','rib-descent',
     'rib-diff','rib-avg-slope','rib-max-slope',
     'waypoints-list','map-hint','btn-set-start','btn-set-end',
+    'gpx-modal-overlay','gpx-modal-input',   // GPX 파일명 모달
   ].forEach(id => { $el[id] = document.getElementById(id); });
 
   // API 키 복원
@@ -959,12 +1049,38 @@ function drawRoute(geojson) {
 }
 
 // ──────────────────────────────────────────
+// GPX 파일명 모달
+// ──────────────────────────────────────────
+function openGpxModal() {
+  if (!routePoints.length) return;
+  const label = PROFILE_LABELS[selectedProfile] || '경로';
+  $el['gpx-modal-input'].value = `${label}_${localDateStr()}`;
+  $el['gpx-modal-overlay'].classList.add('open');
+  $el['gpx-modal-input'].select();
+  $el['gpx-modal-input'].focus();
+}
+
+function closeGpxModal() {
+  $el['gpx-modal-overlay'].classList.remove('open');
+}
+
+function confirmGpxDownload() {
+  const raw = $el['gpx-modal-input'].value.trim();
+  closeGpxModal();
+  downloadGpx(raw);
+}
+
 // GPX 다운로드
 // ──────────────────────────────────────────
-function downloadGpx() {
+function downloadGpx(customName) {
   if (!routePoints.length) return;
-  const label = { 'foot-hiking':'등산경로','foot-walking':'도보경로','cycling-regular':'자전거경로' }[selectedProfile] || '경로';
-  const now   = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  const label = PROFILE_LABELS[selectedProfile] || '경로';
+  const now   = new Date().toISOString().replace(/\.\d+Z$/, 'Z');  // GPX <time> 용 UTC 타임스탬프
+
+  // 파일명 처리: OS·XML 금지 특수문자 제거(&포함), 비어있으면 기본값
+  const safeName = (customName || '').replace(/[\\/:*?"<>|&]/g, '').trim() || `${label}_${localDateStr()}`;
+  // XML 요소 내에 삽입할 안전한 이름 (추가 이스케이프)
+  const xmlName  = htmlEsc(safeName);
 
   const wptTags = wpIds.map((id, idx) => {
     const lat = document.getElementById(`wp-lat-${id}`).value;
@@ -983,7 +1099,7 @@ function downloadGpx() {
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
   <metadata>
-    <name>${label}</name>
+    <name>${xmlName}</name>
     <time>${now}</time>
   </metadata>
   <wpt lat="${routePoints[0].lat.toFixed(7)}" lon="${routePoints[0].lng.toFixed(7)}">
@@ -993,7 +1109,7 @@ ${wptTags ? wptTags + '\n' : ''}  <wpt lat="${routePoints.at(-1).lat.toFixed(7)}
     <name>도착지</name>
   </wpt>
   <trk>
-    <name>${label}</name>
+    <name>${xmlName}</name>
     <trkseg>
 ${trkpts}
     </trkseg>
@@ -1002,7 +1118,7 @@ ${trkpts}
 
   const blob = new Blob([gpx], { type: 'application/gpx+xml' });
   const url  = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: `${label}_${now.slice(0,10)}.gpx` });
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${safeName}.gpx` });
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1295,7 +1411,7 @@ function makeCircleIcon(color, text, fontSize) {
   });
 }
 function setLoading(on) {
-  $el['find-label'].style.display   = on ? 'none' : 'flex';
+  $el['find-label'].style.display   = on ? 'none' : '';   // <span>은 flex가 아닌 '' (인라인 기본값)으로 복원
   $el['find-spinner'].style.display = on ? 'block' : 'none';
   if (on) {
     $el['find-btn'].disabled = true;
@@ -1497,13 +1613,16 @@ function drawElevChart(points) {
       return;
     }
 
-    // 가장 가까운 데이터 포인트 탐색
+    // 가장 가까운 데이터 포인트 탐색 (data는 dist 기준 오름차순 → 이진탐색 O(log n))
     const tgt = pct * totalDist;
-    let ci = 0, best = Infinity;
-    for (let i = 0; i < data.length; i++) {
-      const df = Math.abs(data[i].dist - tgt);
-      if (df < best) { best = df; ci = i; }
+    let lo = 0, hi = data.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (data[mid].dist < tgt) lo = mid + 1; else hi = mid;
     }
+    // lo와 lo-1 중 tgt에 더 가까운 쪽 선택
+    const ci = (lo > 0 && Math.abs(data[lo-1].dist - tgt) < Math.abs(data[lo].dist - tgt))
+      ? lo - 1 : lo;
     const pt    = data[ci];
     const seg   = ci > 0 ? slopes[ci - 1] : { pct: 0, abs: 0 };
     const color = slopeColor(seg.abs);
@@ -1589,8 +1708,9 @@ function drawElevChart(points) {
 // ──────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (pickMode)  { clearPickMode(); }          // 지도 클릭 선택 모드 취소
-    if (ctxMenu)   { closeContextMenu(); }        // 컨텍스트 메뉴 닫기
+    if ($el['gpx-modal-overlay']?.classList.contains('open')) { closeGpxModal(); return; } // 모달 우선
+    if (pickMode)  { clearPickMode(); }           // 지도 클릭 선택 모드 취소
+    if (ctxMenu)   { closeContextMenu(); }         // 컨텍스트 메뉴 닫기
   }
 });
 
@@ -1599,5 +1719,20 @@ document.addEventListener('keydown', e => {
 // ──────────────────────────────────────────
 initMap();
 </script>
-</body>
-</html>
+
+<!-- GPX 파일명 입력 모달 -->
+<div id="gpx-modal-overlay" onclick="if(event.target===this)closeGpxModal()">
+  <div id="gpx-modal">
+    <h3>💾 GPX 파일명 입력</h3>
+    <input type="text" id="gpx-modal-input" placeholder="파일명을 입력하세요" maxlength="60" onkeydown="if(event.key==='Enter')confirmGpxDownload(); if(event.key==='Escape')closeGpxModal()">
+    <p id="gpx-modal-hint">.gpx 확장자는 자동으로 붙습니다. 비워두면 기본 이름으로 저장됩니다.</p>
+    <div id="gpx-modal-btns">
+      <button id="gpx-modal-cancel" onclick="closeGpxModal()">취소</button>
+      <button id="gpx-modal-confirm" onclick="confirmGpxDownload()">저장</button>
+    </div>
+  </div>
+</div>
+
+
+
+</body></html>
