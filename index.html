@@ -550,7 +550,10 @@
 
     <!-- 경로 정보 바 -->
     <div id="route-info-bar">
-      <button id="rib-close" title="닫기" onclick="$el['route-overlay'].style.display='none'">✕</button>
+      <button id="rib-close" title="닫기" onclick="
+        $el['route-overlay'].style.display='none';
+        if(hoverRouteMarker){map.removeLayer(hoverRouteMarker);hoverRouteMarker=null;}
+      ">✕</button>
     <div class="rib-item">
       <span class="rib-icon">📏</span>
       <div class="rib-texts">
@@ -609,6 +612,19 @@
     </div><!-- /#route-info-bar -->
   </div><!-- /#route-overlay -->
 </div><!-- /#map-wrap -->
+
+<!-- GPX 파일명 입력 모달 — 반드시 <script> 앞에 위치해야 initMap()의 $el 캐싱이 정상 동작 -->
+<div id="gpx-modal-overlay" onclick="if(event.target===this)closeGpxModal()">
+  <div id="gpx-modal">
+    <h3>💾 GPX 파일명 입력</h3>
+    <input type="text" id="gpx-modal-input" placeholder="파일명을 입력하세요" maxlength="60" onkeydown="if(event.key==='Enter')confirmGpxDownload(); if(event.key==='Escape')closeGpxModal()">
+    <p id="gpx-modal-hint">.gpx 확장자는 자동으로 붙습니다. 비워두면 기본 이름으로 저장됩니다.</p>
+    <div id="gpx-modal-btns">
+      <button id="gpx-modal-cancel" onclick="closeGpxModal()">취소</button>
+      <button id="gpx-modal-confirm" onclick="confirmGpxDownload()">저장</button>
+    </div>
+  </div>
+</div>
 
 <!-- ════════════════ 스크립트 ════════════════ -->
 <script>
@@ -703,21 +719,19 @@ async function copySourceCode() {
 
   try {
     await navigator.clipboard.writeText(html);
-    btn.classList.add('copied');
-    setTimeout(() => btn.classList.remove('copied'), 2000);
   } catch {
-    // Clipboard API 실패 시 execCommand 폴백
+    // Clipboard API 실패 시 execCommand 폴백 — 반드시 미리 캡처한 html 변수 재사용 (API 키 포함 방지)
     const ta = Object.assign(document.createElement('textarea'), {
-      value: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
+      value: html,
       style: 'position:fixed;opacity:0',
     });
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    btn.classList.add('copied');
-    setTimeout(() => btn.classList.remove('copied'), 2000);
   }
+  btn.classList.add('copied');
+  setTimeout(() => btn.classList.remove('copied'), 2000);
 }
 
 // ──────────────────────────────────────────
@@ -1129,6 +1143,10 @@ ${trkpts}
 // 전체 초기화
 // ──────────────────────────────────────────
 function resetAll() {
+  // 열려있는 UI 상태 정리
+  closeGpxModal();
+  closeContextMenu();
+  if (pickMode) clearPickMode();
   // 진행 중인 산 검색 요청 취소
   if (_searchAbortCtrl) { _searchAbortCtrl.abort(); _searchAbortCtrl = null; }
   ['start-lat','start-lng','goal-lat','goal-lng'].forEach(id => { $el[id].value = ''; });
@@ -1252,13 +1270,14 @@ async function searchMountain() {
   const q = $el['mountain-search'].value.trim();
   if (!q) return;
 
-  // 이전 요청이 아직 진행 중이면 취소
+  // 이전 요청이 아직 진행 중이면 취소 (새 검색으로 인한 abort — 오류 표시 안 함)
   if (_searchAbortCtrl) _searchAbortCtrl.abort();
   _searchAbortCtrl = new AbortController();
   const signal = _searchAbortCtrl.signal;
 
-  // 8초 타임아웃
-  const timeoutId = setTimeout(() => _searchAbortCtrl.abort(), 8000);
+  // 8초 타임아웃 — 별도 AbortController로 타임아웃 구분
+  let _timedOut = false;
+  const timeoutId = setTimeout(() => { _timedOut = true; _searchAbortCtrl.abort(); }, 8000);
 
   const container = $el['search-results'];
   const goBtn     = $el['search-go-btn'];
@@ -1277,9 +1296,10 @@ async function searchMountain() {
     if (!resp.ok) throw new Error(`서버 오류 (${resp.status})`);
     renderSearchResults(await resp.json());
   } catch (e) {
+    if (e.name === 'AbortError' && !_timedOut) return; // 새 검색으로 인한 취소 — 무시
     const errDiv = document.createElement('div');
     errDiv.className = 'no-results';
-    errDiv.textContent = e.name === 'AbortError'
+    errDiv.textContent = (e.name === 'AbortError' && _timedOut)
       ? '⚠️ 검색 시간이 초과되었습니다. 다시 시도해 주세요.'
       : '⚠️ ' + e.message;
     container.innerHTML = '';
@@ -1720,18 +1740,6 @@ document.addEventListener('keydown', e => {
 initMap();
 </script>
 
-<!-- GPX 파일명 입력 모달 -->
-<div id="gpx-modal-overlay" onclick="if(event.target===this)closeGpxModal()">
-  <div id="gpx-modal">
-    <h3>💾 GPX 파일명 입력</h3>
-    <input type="text" id="gpx-modal-input" placeholder="파일명을 입력하세요" maxlength="60" onkeydown="if(event.key==='Enter')confirmGpxDownload(); if(event.key==='Escape')closeGpxModal()">
-    <p id="gpx-modal-hint">.gpx 확장자는 자동으로 붙습니다. 비워두면 기본 이름으로 저장됩니다.</p>
-    <div id="gpx-modal-btns">
-      <button id="gpx-modal-cancel" onclick="closeGpxModal()">취소</button>
-      <button id="gpx-modal-confirm" onclick="confirmGpxDownload()">저장</button>
-    </div>
-  </div>
-</div>
 
 
 
