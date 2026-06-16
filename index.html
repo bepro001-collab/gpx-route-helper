@@ -436,7 +436,7 @@
       <h1>🗺️ GPX 경로 만들기 도우미 <span style="font-size:10px;font-weight:400;color:#bbb;">(저작권: 이강헌)</span></h1>
       <p>OpenStreetMap · OpenRouteService · 완전 무료</p>
     </div>
-    <button id="copy-source-btn" title="index.html 소스 복사" onclick="copySourceCode()">
+    <button id="copy-source-btn" title="index.html 소스 복사" onclick="copySourceCode()" class="copied">
       📋
       <span class="copy-tooltip">복사됨!</span>
     </button>
@@ -486,7 +486,30 @@
   <!-- 경유지 섹션 -->
   <div id="waypoints-section">
     <div class="section-divider">경유지</div>
-    <div id="waypoints-list"></div>
+    <div id="waypoints-list"><div class="card waypoint-card" id="wp-card-0">
+    <div class="card-title">
+      <span class="marker-label">
+        <span class="wp-badge" id="wp-badge-0">1</span> 경유지
+      </span>
+      <div style="display:flex;gap:4px;align-items:center">
+        <div class="move-btns">
+          <button class="move-btn edge" id="wp-top-0" onclick="moveWaypointEdge(0,-1)" title="최상위로" disabled=""><span class="edge-arrow">▲</span><span class="edge-label">TOP</span></button>
+          <button class="move-btn edge" id="wp-up-0" onclick="moveWaypoint(0,-1)" title="위로" disabled=""><span class="edge-arrow">▲</span><span class="edge-label">&nbsp;</span></button>
+          <button class="move-btn edge" id="wp-down-0" onclick="moveWaypoint(0,+1)" title="아래로" disabled=""><span class="edge-arrow">▼</span><span class="edge-label">&nbsp;</span></button>
+          <button class="move-btn edge" id="wp-bottom-0" onclick="moveWaypointEdge(0,+1)" title="최하위로" disabled=""><span class="edge-arrow">▼</span><span class="edge-label">BOT</span></button>
+        </div>
+        <button class="set-btn" onclick="startPickMode('wp-0')">🖱 지도 선택</button>
+        <button class="del-btn" onclick="removeWaypoint(0)">✕</button>
+      </div>
+    </div>
+    <div class="coord-row">
+      <label>위도 (Lat)
+        <input type="number" id="wp-lat-0" step="0.000001" placeholder="위도 입력" oninput="onCoordInput()">
+      </label>
+      <label>경도 (Lng)
+        <input type="number" id="wp-lng-0" step="0.000001" placeholder="경도 입력" oninput="onCoordInput()">
+      </label>
+    </div></div></div>
     <button id="add-wp-btn" onclick="addWaypoint()">＋ 경유지 추가</button>
   </div>
 
@@ -544,7 +567,7 @@
 
   <!-- 우상단 버튼 그룹 -->
   <div id="map-top-right">
-    <button id="reset-btn" onclick="resetAll()">↺ 초기화</button>
+    <button id="reset-btn" onclick="resetAll()" style="display: block;">↺ 초기화</button>
     <button id="gpx-import-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPX 불러오기</button>
     <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="loadGpxFile(this)">
   </div>
