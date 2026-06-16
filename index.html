@@ -165,7 +165,7 @@
       font-size: 12px; font-weight: 600;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .marker-label { display: flex; align-items: center; gap: 6px; }
+    .marker-label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
     .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
     .dot-start { background: #22c55e; }
     .dot-end   { background: #ef4444; }
@@ -234,6 +234,13 @@
     }
     .move-btn:hover    { background: #e8eaed; }
     .move-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .move-btns { gap: 4px; }
+    .move-btn.edge {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0; padding: 1px 3px; line-height: 1;
+    }
+    .move-btn.edge .edge-arrow { font-size: 10px; font-weight: 900; }
+    .move-btn.edge .edge-label { font-size: 5px; font-weight: 700; letter-spacing: 0; }
 
     /* 프로필 */
     .profile-row { display: flex; gap: 5px; }
@@ -862,8 +869,10 @@ function addWaypoint(latlng = null) {
       </span>
       <div style="display:flex;gap:4px;align-items:center">
         <div class="move-btns">
-          <button class="move-btn" id="wp-up-${id}"   onclick="moveWaypoint(${id},-1)" title="위로">▲</button>
-          <button class="move-btn" id="wp-down-${id}" onclick="moveWaypoint(${id},+1)" title="아래로">▼</button>
+          <button class="move-btn edge" id="wp-top-${id}"  onclick="moveWaypointEdge(${id},-1)" title="최상위로"><span class="edge-arrow">▲</span><span class="edge-label">TOP</span></button>
+          <button class="move-btn edge" id="wp-up-${id}"   onclick="moveWaypoint(${id},-1)" title="위로"><span class="edge-arrow">▲</span><span class="edge-label">&nbsp;</span></button>
+          <button class="move-btn edge" id="wp-down-${id}" onclick="moveWaypoint(${id},+1)" title="아래로"><span class="edge-arrow">▼</span><span class="edge-label">&nbsp;</span></button>
+          <button class="move-btn edge" id="wp-bottom-${id}" onclick="moveWaypointEdge(${id},+1)" title="최하위로"><span class="edge-arrow">▼</span><span class="edge-label">BOT</span></button>
         </div>
         <button class="set-btn" onclick="startPickMode('wp-${id}')">🖱 지도 선택</button>
         <button class="del-btn" onclick="removeWaypoint(${id})">✕</button>
@@ -892,14 +901,33 @@ function removeWaypoint(id) {
   refreshWaypointUI(); onCoordInput();
 }
 
+// wpIds 순서에 맞춰 카드 DOM을 재배치 (fragment로 reflow 1회) 후 UI 갱신
+function applyWaypointOrder() {
+  const frag = document.createDocumentFragment();
+  for (const i of wpIds) {
+    const card = document.getElementById(`wp-card-${i}`);
+    if (card) frag.appendChild(card);
+  }
+  $el['waypoints-list'].appendChild(frag);
+  refreshWaypointUI();
+}
+
 function moveWaypoint(id, dir) {
   const idx = wpIds.indexOf(id);
   const nIdx = idx + dir;
-  if (nIdx < 0 || nIdx >= wpIds.length) return;
+  if (idx < 0 || nIdx < 0 || nIdx >= wpIds.length) return;
   [wpIds[idx], wpIds[nIdx]] = [wpIds[nIdx], wpIds[idx]];
-  const list = $el['waypoints-list'];
-  wpIds.map(i => document.getElementById(`wp-card-${i}`)).forEach(c => list.appendChild(c));
-  refreshWaypointUI();
+  applyWaypointOrder();
+}
+
+function moveWaypointEdge(id, dir) {
+  const idx = wpIds.indexOf(id);
+  if (idx < 0) return;
+  const nIdx = dir < 0 ? 0 : wpIds.length - 1;
+  if (idx === nIdx) return;
+  wpIds.splice(idx, 1);
+  wpIds.splice(nIdx, 0, id);
+  applyWaypointOrder();
 }
 
 function applyWaypointCoord(id, latlng) {
@@ -917,13 +945,19 @@ function placeWaypointMarker(id, latlng) {
 }
 
 function refreshWaypointUI() {
+  const last = wpIds.length - 1;
   wpIds.forEach((id, idx) => {
+    const isFirst = idx === 0, isLast = idx === last;
     const badge = document.getElementById(`wp-badge-${id}`);
     if (badge) badge.textContent = idx + 1;
-    const up   = document.getElementById(`wp-up-${id}`);
-    const down = document.getElementById(`wp-down-${id}`);
-    if (up)   up.disabled   = (idx === 0);
-    if (down) down.disabled = (idx === wpIds.length - 1);
+    const top    = document.getElementById(`wp-top-${id}`);
+    const up     = document.getElementById(`wp-up-${id}`);
+    const down   = document.getElementById(`wp-down-${id}`);
+    const bottom = document.getElementById(`wp-bottom-${id}`);
+    if (top)    top.disabled    = isFirst;
+    if (up)     up.disabled     = isFirst;
+    if (down)   down.disabled   = isLast;
+    if (bottom) bottom.disabled = isLast;
     // 마커 아이콘(번호)만 갱신 — 마커 제거/추가 없이 setIcon으로 처리
     if (wpMarkers[id]) {
       wpMarkers[id].setIcon(makeCircleIcon('#f59e0b', String(idx + 1), 11));
